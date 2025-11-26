@@ -1,0 +1,123 @@
+import os
+from sqlalchemy import select, create_engine
+from sqlalchemy.orm import Session
+from pve_cloud.orm.alchemy import BindDomains
+import dns.query
+import dns.update
+import dns.tsigkeyring
+import dns.rcode
+import boto3
+from botocore.exceptions import ClientError
+
+
+# init boto3 client if os vars are defined
+route53_key_id = os.getenv("ROUTE53_ACCESS_KEY_ID")
+route53_secret_key = os.getenv("ROUTE53_SECRET_ACCESS_KEY")
+if route53_key_id and route53_secret_key:
+    if os.getenv("ROUTE53_ENDPOINT_URL"):
+        boto_client = boto3.client(
+            "route53",
+            region_name=os.getenv("ROUTE53_REGION"),
+            endpoint_url=os.getenv("ROUTE53_ENDPOINT_URL"),
+            aws_access_key_id=route53_key_id,
+            aws_secret_access_key=route53_secret_key
+        )
+    else:
+        # use default endpoint (no e2e testing)
+        boto_client = boto3.client(
+            "route53",
+            region_name=os.getenv("ROUTE53_REGION"),
+            aws_access_key_id=route53_key_id,
+            aws_secret_access_key=route53_secret_key
+        )
+    
+
+def get_bind_domains():
+    engine = create_engine(os.getenv("PG_CONN_STR"))
+    with Session(engine) as session:
+        stmt = select(BindDomains)
+        domains = session.execute(stmt).scalars().all()
+
+    print([domain.domain for domain in domains])
+    return domains
+
+
+def get_ext_domains():
+    if not (route53_key_id and route53_secret_key):
+        return None # function will handle
+
+    # only implemented for route53 at the moment
+    hosted_zones = boto_client.list_hosted_zones()["HostedZones"]
+
+    return [(zone["Name"], zone["Id"]) for zone in hosted_zones]
+
+
+def set_ingress_ext_dyn_dns(ext_domains, host):
+    if ext_domains is None:
+        return []
+    
+    matching_domain = None
+    for domain in ext_domains:
+        if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified
+            matching_domain = domain
+            break
+
+    if matching_domain is None:
+        print(f"No external authoratative domain found for host {host}")
+        return []
+
+    try:
+        response = boto_client.change_resource_record_sets(
+            HostedZoneId=matching_domain[1],
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": "UPSERT",  # replace or create
+                        "ResourceRecordSet": {
+                            "Name": host + ".",
+                            "Type": "A",
+                            "TTL": 300,
+                            "ResourceRecords": [{"Value": os.getenv("EXTERNAL_FORWARDED_IP")}],
+                        },
+                    }
+                ]
+            },
+        )
+
+        print("Change submitted:", response["ChangeInfo"]["Id"])
+        return []
+
+    except ClientError as e:
+        return [f"Error ext dns update {e.response["Error"]}"]
+
+
+def set_ingress_dyn_dns(bind_domains, host):
+    matching_domain = None
+    for bind_domain in bind_domains:
+        if host.endswith(bind_domain.domain):
+            matching_domain = bind_domain.domain
+            break
+    
+    if matching_domain is None:
+        print(f"No authoratative domain found for host {host}")
+        return []
+
+    dns_update = dns.update.Update(
+        matching_domain,
+        keyring=dns.tsigkeyring.from_text({
+            "internal.": os.getenv("BIND_DNS_UPDATE_KEY")
+        }),
+        keyname="internal.",
+        keyalgorithm="hmac-sha256"
+    )
+
+    # set @ if ingress is for apex, else set the host extracted from full host - matching domain
+    dns_update.replace("@" if host == matching_domain else host.removesuffix("." + matching_domain), 300, "A", os.getenv("INTERNAL_PROXY_FIP"))
+    response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
+
+    print(response, dns.rcode.to_text(response.rcode()))
+
+    if response.rcode() != dns.rcode.NOERROR:
+        return [f"Error internal dns update {dns.rcode.to_text(response.rcode())}"]
+    else:
+        return []

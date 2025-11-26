@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pve-cloud-controller"
+authors = [{ name = "Tobias Huebner", email = "tobias.huebner@vmzberlin.com" }]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+dynamic = ["dependencies", "version"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+version = {attr = "pve_cloud_ctrl._version.__version__"}
+
+[project.scripts]
+watcher = "pve_cloud_ctrl.watcher:main"
+adm = "pve_cloud_ctrl.adm:main"
+cron = "pve_cloud_ctrl.cron:main"
+
