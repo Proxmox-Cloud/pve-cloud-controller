@@ -28,9 +28,9 @@ trigger_upstream_release_tag:
   script:
     - |
       curl --request POST \
-        --form "token=${INCLUDING_JOB_TOKEN}" \
+        --form "token=${CI_JOB_TOKEN}" \
         --form "ref=${UPSTREAM_TAG_MESSAGE}" \
-        "${CI_API_V4_URL}/projects/${INCLUDING_PROJECT_ID}/trigger/pipeline"
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
   rules:
     - if: ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
 
