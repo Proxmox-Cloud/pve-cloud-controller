@@ -187,15 +187,42 @@ def ingress_dns():
                                     "status": "Failure",
                                     "message": ", ".join(errors),
                                     "reason": "InternalError",
-                                    "code": 500
+                                    "code": 500 # todo: better error codes on deny
                                 }
                             }
                         }
-
+                    # return immediatly on error
                     return jsonify(response)
+
+        elif admission_review['request']['operation'] == "DELETE":
+            for rule in admission_review['request']['oldObject']['spec']['rules']:
+                host = rule['host']
+
+                errors = []
+                
+                errors.extend(funcs.delete_ingress_dyn_dns(bind_domains, host))
+                errors.extend(funcs.delete_ingress_ext_dyn_dns(ext_domains, host))
+                
+                if errors:
+                    response = {
+                            "apiVersion": "admission.k8s.io/v1",
+                            "kind": "AdmissionReview",
+                            "response": {
+                                "uid": uid,
+                                "allowed": False, # dont allow ingress submit since ingress dns failed
+                                "status": {
+                                    "status": "Failure",
+                                    "message": ", ".join(errors),
+                                    "reason": "InternalError",
+                                    "code": 500 # todo: better error codes on deny
+                                }
+                            }
+                        }
+                    # return immediatly on error
+                    return jsonify(response)
+
         else:
-            print(f"Operation {admission_review['request']['operation']} not implemented!")
-            # todo: implement delete with oldObject, normal object is None on delete operation
+            raise Exception(f"Operation {admission_review['request']['operation']} not implemented!")
 
     response = {
         "apiVersion": "admission.k8s.io/v1",

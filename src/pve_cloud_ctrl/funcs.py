@@ -8,6 +8,8 @@ import dns.tsigkeyring
 import dns.rcode
 import boto3
 from botocore.exceptions import ClientError
+import json
+import fnmatch
 
 
 # init boto3 client if os vars are defined
@@ -30,7 +32,26 @@ if route53_key_id and route53_secret_key:
             aws_access_key_id=route53_key_id,
             aws_secret_access_key=route53_secret_key
         )
+
+
+# load the cluster cert conf
+with open("/etc/controller-cert-conf/cluster_cert_entries.json", "r") as f:
+    cluster_cert_entries = json.load(f)
+
+
+def validate_host_allowed(host):
+    allowed = False
+    for entry in cluster_cert_entries:
+        zone = entry["zone"]
+
+        for name in entry["names"]:
+            if fnmatch.fnmatch(host, f"{name}.{zone}"):
+                allowed = True
+                break
     
+    # return errors
+    return allowed
+
 
 def get_bind_domains():
     engine = create_engine(os.getenv("PG_CONN_STR"))
@@ -53,6 +74,10 @@ def get_ext_domains():
 
 
 def set_ingress_ext_dyn_dns(ext_domains, host):
+    cluster_cert_covered = validate_host_allowed(host)
+    if not cluster_cert_covered:
+        return [f"Host {host} is not covered by the clusters certificate!"]
+
     if ext_domains is None:
         return []
     
@@ -91,7 +116,47 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
         return [f"Error ext dns update {e.response["Error"]}"]
 
 
+def delete_ingress_ext_dyn_dns(ext_domains, host):
+    matching_domain = None
+    for domain in ext_domains:
+        if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified
+            matching_domain = domain
+            break
+
+    if matching_domain is None:
+        print(f"No external authoratative domain found for host {host}")
+        return []
+
+    try:
+        response = boto_client.change_resource_record_sets(
+            HostedZoneId=matching_domain[1],
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": "DELETE",
+                        "ResourceRecordSet": {
+                            "Name": host + ".",
+                            "Type": "A",
+                            "TTL": 300,
+                            "ResourceRecords": [{"Value": os.getenv("EXTERNAL_FORWARDED_IP")}],
+                        },
+                    }
+                ]
+            },
+        )
+
+        print("Change submitted:", response["ChangeInfo"]["Id"])
+        return []
+
+    except ClientError as e:
+        return [f"Error ext dns delete {e.response["Error"]}"]
+
+
 def set_ingress_dyn_dns(bind_domains, host):
+    cluster_cert_covered = validate_host_allowed(host)
+    if not cluster_cert_covered:
+        return [f"Host {host} is not covered by the clusters certificate!"]
+        
     matching_domain = None
     for bind_domain in bind_domains:
         if host.endswith(bind_domain.domain):
@@ -119,5 +184,42 @@ def set_ingress_dyn_dns(bind_domains, host):
 
     if response.rcode() != dns.rcode.NOERROR:
         return [f"Error internal dns update {dns.rcode.to_text(response.rcode())}"]
+    else:
+        return []
+
+
+
+def delete_ingress_dyn_dns(bind_domains, host):
+    # check domain exists in bind first
+    matching_domain = None
+    for bind_domain in bind_domains:
+        if host.endswith(bind_domain.domain):
+            matching_domain = bind_domain.domain
+            break
+    
+    if matching_domain is None:
+        print(f"No authoratative domain found for host {host}")
+        return []
+
+    # create the update object
+    dns_update = dns.update.Update(
+        matching_domain,
+        keyring=dns.tsigkeyring.from_text({
+            "internal.": os.getenv("BIND_DNS_UPDATE_KEY")
+        }),
+        keyname="internal.",
+        keyalgorithm="hmac-sha256"
+    )
+
+    # delete the record
+    dns_update.delete("@" if host == matching_domain else host.removesuffix("." + matching_domain), "A")
+
+    response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
+
+    print(response, dns.rcode.to_text(response.rcode()))
+
+    # should always return noerror calling delete on existing zone, even when record doesnt exist
+    if response.rcode() != dns.rcode.NOERROR:
+        return [f"Error internal dns delete {dns.rcode.to_text(response.rcode())}"]
     else:
         return []
