@@ -48,6 +48,10 @@ def validate_host_allowed(host):
             if fnmatch.fnmatch(host, f"{name}.{zone}"):
                 allowed = True
                 break
+        
+        if entry["apex_zone_san"] and zone == host:
+            # if there was an apex san created it covers a host that equals the zone
+            allowed = True 
     
     # return errors
     return allowed
