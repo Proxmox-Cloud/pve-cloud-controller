@@ -121,6 +121,9 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
 
 
 def delete_ingress_ext_dyn_dns(ext_domains, host):
+    if ext_domains is None:
+        return []
+
     matching_domain = None
     for domain in ext_domains:
         if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified
