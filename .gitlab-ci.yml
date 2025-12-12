@@ -1,6 +1,6 @@
 release_tag:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:latest
+  image: tobiashvmz/pve-cloud-ci:2025121214
   script:
     - pwd
     - /scripts/release-tag.sh
@@ -12,7 +12,7 @@ release_tag:
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:latest
+  image: tobiashvmz/pve-cloud-ci:2025121214
   script:
     # write the new version
     - sed -i "s/^ARG PY_PVE_CLOUD=.*$/ARG PY_PVE_CLOUD=${PY_PVE_CLOUD}/" Dockerfile
