@@ -1,18 +1,19 @@
 release_tag:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:2025121214
+  image: tobiashvmz/pve-cloud-ci:2025121321
   script:
     - pwd
     - /scripts/release-tag.sh
   rules:
     - if: '$CI_COMMIT_TAG =~ /^release-[a-z]+$/'
+    - if: '$CI_COMMIT_TAG =~ /^release-all-[a-z]+$/'
   resource_group: deploy-prod
 
 
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:2025121214
+  image: tobiashvmz/pve-cloud-ci:2025121321
   script:
     # write the new version
     - sed -i "s/^ARG PY_PVE_CLOUD=.*$/ARG PY_PVE_CLOUD=${PY_PVE_CLOUD}/" Dockerfile
@@ -32,7 +33,7 @@ trigger_upstream_release_tag:
         --form "ref=${UPSTREAM_TAG_MESSAGE}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
   rules:
-    - if: ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
+    - if: $UPSTREAM_TAG_MESSAGE =~ /-all-/ && ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
 
 
 # actual image build and release
