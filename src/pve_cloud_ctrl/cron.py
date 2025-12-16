@@ -22,6 +22,8 @@ def main():
     if os.getenv("BIND_DNS_UPDATE_KEY") and os.getenv("BIND_MASTER_IP") and os.getenv("INTERNAL_PROXY_FIP"):
         bind_domains = funcs.get_bind_domains()
 
+    ext_domains = funcs.get_ext_domains() # might be none
+
     # update certs and mirror pull secret
     with Session(engine) as session:
         stmt = select(AcmeX509).where(AcmeX509.stack_fqdn == os.getenv("STACK_FQDN"))
@@ -50,7 +52,9 @@ def main():
                     for rule in ingress.spec.rules:
                         host = rule.host
 
-                        errors = funcs.set_ingress_dyn_dns(bind_domains, host)
+                        errors = []
+                        errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host)) 
+                        errors.extend(funcs.set_ingress_ext_dyn_dns(ext_domains, host))
                         if errors:
                             raise Exception(", ".join(errors))
 

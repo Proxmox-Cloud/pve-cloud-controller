@@ -35,8 +35,12 @@ if route53_key_id and route53_secret_key:
 
 
 # load the cluster cert conf
-with open("/etc/controller-cert-conf/cluster_cert_entries.json", "r") as f:
+with open("/etc/controller-conf/cluster_cert_entries.json", "r") as f:
     cluster_cert_entries = json.load(f)
+
+# load externally exposed domains
+with open("/etc/controller-conf/external_domains.json", "r") as f:
+    external_domains = json.load(f)
 
 
 def validate_host_allowed(host):
@@ -55,6 +59,24 @@ def validate_host_allowed(host):
     
     # return errors
     return allowed
+
+
+def host_exposed(host):
+    exposed = False
+    for entry in external_domains:
+        zone = entry["zone"]
+
+        for name in entry["names"]:
+            if fnmatch.fnmatch(host, f"{name}.{zone}"):
+                exposed = True
+                break
+        
+        if entry["expose_apex"] and zone == host:
+            # if there was an apex san created it covers a host that equals the zone
+            exposed = True 
+    
+    return exposed
+
 
 
 def get_bind_domains():
@@ -84,6 +106,9 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
 
     if ext_domains is None:
         return []
+    
+    if not host_exposed(host):
+        return [] # we skip external dns for hosts that are not exposed
     
     matching_domain = None
     for domain in ext_domains:
@@ -123,7 +148,10 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
 def delete_ingress_ext_dyn_dns(ext_domains, host):
     if ext_domains is None:
         return []
-
+    
+    if not host_exposed(host):
+        return [] # we skip external dns for hosts that are not exposed
+    
     matching_domain = None
     for domain in ext_domains:
         if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified

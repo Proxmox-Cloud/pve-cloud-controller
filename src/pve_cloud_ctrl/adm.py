@@ -166,13 +166,66 @@ def ingress_dns():
 
         ext_domains = funcs.get_ext_domains() # might be none
         
-        if admission_review['request']['operation'] in ["CREATE", "UPDATE"]:
+        if admission_review['request']['operation'] == "CREATE":
             # iterate ingress hosts and make dns updates for zones bind is authoratative for
             for rule in admission_review['request']['object']['spec']['rules']:
                 host = rule['host']
 
                 errors = []
+                errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host))
+                errors.extend(funcs.set_ingress_ext_dyn_dns(ext_domains, host))
                 
+                if errors:
+                    response = {
+                            "apiVersion": "admission.k8s.io/v1",
+                            "kind": "AdmissionReview",
+                            "response": {
+                                "uid": uid,
+                                "allowed": False, # dont allow ingress submit since ingress dns failed
+                                "status": {
+                                    "status": "Failure",
+                                    "message": ", ".join(errors),
+                                    "reason": "InternalError",
+                                    "code": 500 # todo: better error codes on deny
+                                }
+                            }
+                        }
+                    # return immediatly on error
+                    return jsonify(response)
+        elif admission_review['request']['operation'] == "UPDATE":
+            # rules in old object that changed / arent present in current object need to be deleted
+            new_hosts = set(rule['host'] for rule in admission_review['request']['object']['spec']['rules'])
+            
+            delete_hosts = set(rule['host'] for rule in admission_review['request']['oldObject']['spec']['rules'] if rule['host'] not in new_hosts)
+
+            for host in delete_hosts:
+                errors = []
+                
+                errors.extend(funcs.delete_ingress_dyn_dns(bind_domains, host))
+                errors.extend(funcs.delete_ingress_ext_dyn_dns(ext_domains, host))
+                
+                if errors:
+                    response = {
+                            "apiVersion": "admission.k8s.io/v1",
+                            "kind": "AdmissionReview",
+                            "response": {
+                                "uid": uid,
+                                "allowed": False, # dont allow ingress submit since ingress dns failed
+                                "status": {
+                                    "status": "Failure",
+                                    "message": ", ".join(errors),
+                                    "reason": "InternalError",
+                                    "code": 500 # todo: better error codes on deny
+                                }
+                            }
+                        }
+                    # return immediatly on error
+                    return jsonify(response)
+
+
+            # update / insert new ones
+            for host in new_hosts:
+                errors = []
                 errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host))
                 errors.extend(funcs.set_ingress_ext_dyn_dns(ext_domains, host))
                 
