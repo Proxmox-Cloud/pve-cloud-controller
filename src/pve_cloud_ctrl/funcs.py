@@ -146,7 +146,7 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
         return []
 
     except ClientError as e:
-        return [f"Error ext dns update {e.response["Error"]}"]
+        return [f"Error ext dns update {e.response['Error']}"]
 
 
 def delete_ingress_ext_dyn_dns(ext_domains, host):
@@ -189,7 +189,7 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
         return []
 
     except ClientError as e:
-        return [f"Error ext dns delete {e.response["Error"]}"]
+        return [f"Error ext dns delete {e.response['Error']}"]
 
 
 def set_ingress_dyn_dns(bind_domains, host):

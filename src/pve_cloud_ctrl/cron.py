@@ -33,7 +33,7 @@ def main():
         cert = session.scalars(stmt).first()
 
     if not cert:
-        logger.info(f"No certificate found for {os.getenv("STACK_FQDN")}")
+        logger.info(f"No certificate found for {os.getenv('STACK_FQDN')}")
     else:
         logger.info("crt found")
         logger.info(cert.k8s)

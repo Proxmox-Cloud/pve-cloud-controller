@@ -41,7 +41,7 @@ def watch_namespaces():
                 cert = session.scalars(stmt).first()
 
             if not cert:
-                logger.info(f"No certificate found for {os.getenv("STACK_FQDN")}")
+                logger.info(f"No certificate found for {os.getenv('STACK_FQDN')}")
                 continue
 
             secret = client.V1Secret(metadata=client.V1ObjectMeta(name='cluster-tls'),
