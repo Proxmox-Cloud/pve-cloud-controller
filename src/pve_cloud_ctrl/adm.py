@@ -39,8 +39,8 @@ def get_patched_image(image):
     else:
         patched_image = image
 
-    logger.info("orig image: ", image)
-    logger.info("patched image: ", patched_image)
+    logger.info("orig image: " + image)
+    logger.info("patched image: " + patched_image)
 
     return patched_image
 

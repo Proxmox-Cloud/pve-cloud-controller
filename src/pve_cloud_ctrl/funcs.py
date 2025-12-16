@@ -142,7 +142,7 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
             },
         )
 
-        logger.info("Change submitted:", response["ChangeInfo"]["Id"])
+        logger.info("Change submitted: " + response["ChangeInfo"]["Id"])
         return []
 
     except ClientError as e:
@@ -184,7 +184,8 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
             },
         )
 
-        logger.info("Change submitted:", response["ChangeInfo"]["Id"])
+        logger.info("Change submitted:")
+        logger.info(response["ChangeInfo"]["Id"])
         return []
 
     except ClientError as e:

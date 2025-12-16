@@ -35,7 +35,8 @@ def main():
     if not cert:
         logger.info(f"No certificate found for {os.getenv("STACK_FQDN")}")
     else:
-        logger.info("crt found", cert.k8s)
+        logger.info("crt found")
+        logger.info(cert.k8s)
 
     namespaces = v1.list_namespace()
 
@@ -67,7 +68,7 @@ def main():
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
         if ns.metadata.name in os.getenv("EXCLUDE_BASE_NAMESPACES").split(","):
-            logger.debug("excluded", ns.metadata.name)
+            logger.debug(f"excluded {ns.metadata.name}")
             continue
 
         logger.info(f"processing certs {ns.metadata.name}")
@@ -79,7 +80,8 @@ def main():
                     namespace=ns.metadata.name,
                     body={"stringData": cert.k8s}
                 )
-                logger.info("patched", pr)
+                logger.info("patched")
+                logger.info(pr)
             except ApiException as e:
                 # incase it doesnt exist try to create it
                 if e.status == 404:
@@ -93,7 +95,8 @@ def main():
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):
             mirror_pull_secret = v1.read_namespaced_secret(os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"), "pve-cloud-controller")
-            logger.info("mps", mirror_pull_secret)
+            logger.info("mps")
+            logger.info(mirror_pull_secret)
 
             try:
                 v1.create_namespaced_secret(namespace=ns.metadata.name, body=client.V1Secret(metadata=client.V1ObjectMeta(name='mirror-pull-secret'),
