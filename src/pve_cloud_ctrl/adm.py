@@ -1,18 +1,23 @@
 from flask import Flask, request, jsonify
-import pprint
+import logging
+from pprint import pformat
 import json
 import base64
 from kubernetes import client, config
 import os
 from kubernetes.client.rest import ApiException
 import pve_cloud_ctrl.funcs as funcs
-import dns.rcode
 
+
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
+logger = logging.getLogger("cloud-adm")
 
 app = Flask(__name__)
 
 config.load_incluster_config()
 v1 = client.CoreV1Api()
+net_v1 = client.NetworkingV1Api()
+
 
 def get_patched_image(image):
     patch_registry = os.getenv("HARBOR_MIRROR_HOST")
@@ -34,8 +39,8 @@ def get_patched_image(image):
     else:
         patched_image = image
 
-    print("orig image: ", image)
-    print("patched image: ", patched_image)
+    logger.info("orig image: ", image)
+    logger.info("patched image: ", patched_image)
 
     return patched_image
 
@@ -52,17 +57,17 @@ def mutate_pod():
     exclude_namespace = False
     if os.getenv("EXCLUDE_ADM_NAMESPACES"):
         if namespace in os.getenv("EXCLUDE_ADM_NAMESPACES").split(','):
-            print("exluding namespace")
+            logger.debug("exluding namespace")
             exclude_namespace = True
 
-    pprint.pprint(admission_review)
+    logger.debug(pformat(admission_review))
 
     # pods only get patched to the mirror repository if its actually defined
     if os.getenv("HARBOR_MIRROR_HOST") and os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME") and not exclude_namespace:
         try:
             # check if the secret exists
             mirror_pull_secret = v1.read_namespaced_secret(os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"), namespace)
-            print("secret exists")
+            logger.debug("secret exists")
         except ApiException as e:
             if e.status == 404: # secret doesnt exist yet, create it
                 # read secret from cloud controller namespace
@@ -73,7 +78,7 @@ def mutate_pod():
                     data=mps_controller.data
                 )
                 v1.create_namespaced_secret(namespace=namespace, body=secret)
-                print("created mps")
+                logger.info("created mps")
 
         # patch the pods images to point to our harbor mirror
         patches = []
@@ -159,7 +164,7 @@ def ingress_dns():
 
     if os.getenv("BIND_DNS_UPDATE_KEY") and os.getenv("BIND_MASTER_IP") and os.getenv("INTERNAL_PROXY_FIP"):
 
-        pprint.pprint(admission_review)
+        logger.debug(pformat(admission_review))
         
         # get all zones that our cloud bind is authoratative for
         bind_domains = funcs.get_bind_domains()
@@ -276,6 +281,64 @@ def ingress_dns():
 
         else:
             raise Exception(f"Operation {admission_review['request']['operation']} not implemented!")
+
+    response = {
+        "apiVersion": "admission.k8s.io/v1",
+        "kind": "AdmissionReview",
+        "response": {
+            "uid": uid,
+            "allowed": True  # Allow the request without modifications
+        }
+    }
+
+    return jsonify(response)
+
+
+
+@app.route('/delete-namespace', methods=['POST'])
+def delete_namespace():
+ 
+    admission_review = request.get_json()
+
+    logger.debug(pformat(admission_review))
+
+    uid = admission_review['request']['uid']
+
+    namespace = admission_review['request']['namespace']
+
+    # get all zones that our cloud bind is authoratative for
+    bind_domains = funcs.get_bind_domains()
+
+    ext_domains = funcs.get_ext_domains() # might be none
+    
+    ingresses = net_v1.list_namespaced_ingress(namespace=namespace)
+
+    for ingress in ingresses.items:        
+        if ingress.spec.rules:
+            for rule in ingress.spec.rules:
+                host = rule.host
+
+                errors = []
+                errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host)) 
+                errors.extend(funcs.set_ingress_ext_dyn_dns(ext_domains, host))
+                if errors:
+                    response = {
+                            "apiVersion": "admission.k8s.io/v1",
+                            "kind": "AdmissionReview",
+                            "response": {
+                                "uid": uid,
+                                "allowed": False, # dont allow ingress submit since ingress dns failed
+                                "status": {
+                                    "status": "Failure",
+                                    "message": ", ".join(errors),
+                                    "reason": "InternalError",
+                                    "code": 500 # todo: better error codes on deny
+                                }
+                            }
+                        }
+                    
+                    # return immediatly on error
+                    return jsonify(response)
 
     response = {
         "apiVersion": "admission.k8s.io/v1",

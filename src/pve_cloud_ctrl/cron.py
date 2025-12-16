@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 from pve_cloud.orm.alchemy import AcmeX509
 from kubernetes.client.rest import ApiException
 import pve_cloud_ctrl.funcs as funcs
-import dns.rcode
+import logging
+
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
+logger = logging.getLogger("cloud-cron")
 
 
 def main():
@@ -30,15 +33,15 @@ def main():
         cert = session.scalars(stmt).first()
 
     if not cert:
-        print(f"No certificate found for {os.getenv("STACK_FQDN")}")
+        logger.info(f"No certificate found for {os.getenv("STACK_FQDN")}")
     else:
-        print("crt", cert.k8s)
+        logger.info("crt found", cert.k8s)
 
     namespaces = v1.list_namespace()
 
     # apply ingress dns for all namespaces
     for ns in namespaces.items:
-        print(ns.metadata.name)
+        logger.info(f"processing ingress {ns.metadata.name}")
 
         # reapply ingress dns
         if os.getenv("BIND_DNS_UPDATE_KEY") and os.getenv("BIND_MASTER_IP") and os.getenv("INTERNAL_PROXY_FIP"):
@@ -46,7 +49,7 @@ def main():
             ingresses = net_v1.list_namespaced_ingress(namespace=ns.metadata.name)
 
             for ingress in ingresses.items:
-                print(ingress.metadata.name)
+                logger.info(ingress.metadata.name)
                 
                 if ingress.spec.rules:
                     for rule in ingress.spec.rules:
@@ -64,10 +67,10 @@ def main():
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
         if ns.metadata.name in os.getenv("EXCLUDE_BASE_NAMESPACES").split(","):
-            print("excluded", ns.metadata.name)
+            logger.debug("excluded", ns.metadata.name)
             continue
 
-        print(ns.metadata.name)
+        logger.info(f"processing certs {ns.metadata.name}")
         if cert:
             try:
                 # patch the cluster tls secret - this will always be a patch since its default functionality of pve cloud
@@ -76,7 +79,7 @@ def main():
                     namespace=ns.metadata.name,
                     body={"stringData": cert.k8s}
                 )
-                print("patched", pr)
+                logger.info("patched", pr)
             except ApiException as e:
                 # incase it doesnt exist try to create it
                 if e.status == 404:
@@ -90,7 +93,7 @@ def main():
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):
             mirror_pull_secret = v1.read_namespaced_secret(os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"), "pve-cloud-controller")
-            print("mps", mirror_pull_secret)
+            logger.info("mps", mirror_pull_secret)
 
             try:
                 v1.create_namespaced_secret(namespace=ns.metadata.name, body=client.V1Secret(metadata=client.V1ObjectMeta(name='mirror-pull-secret'),

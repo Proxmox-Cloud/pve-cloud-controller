@@ -1,10 +1,15 @@
 from kubernetes import client, config, watch
 import time
-import pprint
+from pprint import pformat
 import os
 from sqlalchemy import select, create_engine
 from sqlalchemy.orm import Session
 from pve_cloud.orm.alchemy import AcmeX509
+import logging
+
+
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
+logger = logging.getLogger("cloud-watcher")
 
 
 def watch_namespaces():
@@ -21,10 +26,10 @@ def watch_namespaces():
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
         if event['object'].metadata.name in os.getenv("EXCLUDE_BASE_NAMESPACES").split(","):
-            print("excluding ns", event['object'].metadata.name)
+            logger.debug("excluding ns", event['object'].metadata.name)
             continue
         
-        pprint.pprint(event)
+        logger.debug(pformat(event))
 
         if event['type'] == 'ADDED':
             # insert cluster-tls secret
@@ -35,7 +40,7 @@ def watch_namespaces():
                 cert = session.scalars(stmt).first()
 
             if not cert:
-                print(f"No certificate found for {os.getenv("STACK_FQDN")}")
+                logger.info(f"No certificate found for {os.getenv("STACK_FQDN")}")
                 continue
 
             secret = client.V1Secret(metadata=client.V1ObjectMeta(name='cluster-tls'),
@@ -49,8 +54,8 @@ def watch_namespaces():
 def main():
     while True:
         try:
-            print("watching namespaces")
+            logger.debug("watching namespaces")
             watch_namespaces()
         except Exception as e:
-            print(f"[!] Error in watcher loop: {e} - {type(e)}")
+            logger.error(f"[!] Error in watcher loop: {e} - {type(e)}")
             time.sleep(5)

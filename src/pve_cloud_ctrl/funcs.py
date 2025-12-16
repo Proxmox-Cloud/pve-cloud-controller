@@ -10,6 +10,11 @@ import boto3
 from botocore.exceptions import ClientError
 import json
 import fnmatch
+import logging
+
+
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
+logger = logging.getLogger("cloud-funcs")
 
 
 # init boto3 client if os vars are defined
@@ -78,14 +83,13 @@ def host_exposed(host):
     return exposed
 
 
-
 def get_bind_domains():
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
         stmt = select(BindDomains)
         domains = session.execute(stmt).scalars().all()
 
-    print([domain.domain for domain in domains])
+    logger.debug([domain.domain for domain in domains])
     return domains
 
 
@@ -117,7 +121,7 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
             break
 
     if matching_domain is None:
-        print(f"No external authoratative domain found for host {host}")
+        logger.info(f"No external authoratative domain found for host {host}")
         return []
 
     try:
@@ -138,7 +142,7 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
             },
         )
 
-        print("Change submitted:", response["ChangeInfo"]["Id"])
+        logger.info("Change submitted:", response["ChangeInfo"]["Id"])
         return []
 
     except ClientError as e:
@@ -159,7 +163,7 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
             break
 
     if matching_domain is None:
-        print(f"No external authoratative domain found for host {host}")
+        logger.info(f"No external authoratative domain found for host {host}")
         return []
 
     try:
@@ -180,7 +184,7 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
             },
         )
 
-        print("Change submitted:", response["ChangeInfo"]["Id"])
+        logger.info("Change submitted:", response["ChangeInfo"]["Id"])
         return []
 
     except ClientError as e:
@@ -199,7 +203,7 @@ def set_ingress_dyn_dns(bind_domains, host):
             break
     
     if matching_domain is None:
-        print(f"No authoratative domain found for host {host}")
+        logger.info(f"No authoratative domain found for host {host}")
         return []
 
     dns_update = dns.update.Update(
@@ -215,7 +219,8 @@ def set_ingress_dyn_dns(bind_domains, host):
     dns_update.replace("@" if host == matching_domain else host.removesuffix("." + matching_domain), 300, "A", os.getenv("INTERNAL_PROXY_FIP"))
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
 
-    print(response, dns.rcode.to_text(response.rcode()))
+    logger.info(response)
+    logger.info(dns.rcode.to_text(response.rcode()))
 
     if response.rcode() != dns.rcode.NOERROR:
         return [f"Error internal dns update {dns.rcode.to_text(response.rcode())}"]
@@ -233,7 +238,7 @@ def delete_ingress_dyn_dns(bind_domains, host):
             break
     
     if matching_domain is None:
-        print(f"No authoratative domain found for host {host}")
+        logger.info(f"No authoratative domain found for host {host}")
         return []
 
     # create the update object
@@ -250,8 +255,8 @@ def delete_ingress_dyn_dns(bind_domains, host):
     dns_update.delete("@" if host == matching_domain else host.removesuffix("." + matching_domain), "A")
 
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
-
-    print(response, dns.rcode.to_text(response.rcode()))
+    logger.info(response)
+    logger.info(dns.rcode.to_text(response.rcode()))
 
     # should always return noerror calling delete on existing zone, even when record doesnt exist
     if response.rcode() != dns.rcode.NOERROR:
