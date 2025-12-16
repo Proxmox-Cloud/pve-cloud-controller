@@ -1,5 +1,5 @@
 FROM python:alpine3.19
-ARG PY_PVE_CLOUD=0.12.4
+ARG PY_PVE_CLOUD=0.13.0
 ENV PY_PVE_CLOUD=${PY_PVE_CLOUD}
 
 # empty by default, using official pypi
