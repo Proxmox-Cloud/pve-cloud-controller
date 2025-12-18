@@ -55,8 +55,8 @@ def mutate_pod():
 
     # need this to exclude the harbor namespace / system namespaces
     exclude_namespace = False
-    if os.getenv("EXCLUDE_ADM_NAMESPACES"):
-        if namespace in os.getenv("EXCLUDE_ADM_NAMESPACES").split(','):
+    if os.getenv("EXCLUDE_MIRROR_NAMESPACES"):
+        if namespace in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(','):
             logger.debug("exluding namespace")
             exclude_namespace = True
 

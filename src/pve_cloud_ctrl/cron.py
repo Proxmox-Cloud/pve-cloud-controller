@@ -67,7 +67,7 @@ def main():
     for ns in namespaces.items:
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
-        if ns.metadata.name in os.getenv("EXCLUDE_BASE_NAMESPACES").split(","):
+        if ns.metadata.name in os.getenv("EXCLUDE_TLS_NAMESPACES").split(","):
             logger.debug(f"excluded {ns.metadata.name}")
             continue
 
@@ -91,6 +91,14 @@ def main():
                     )
                 else:
                     raise
+
+    # only cert and mirror is filtered
+    for ns in namespaces.items:
+        # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
+        # we still want to apply tls
+        if ns.metadata.name in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(","):
+            logger.debug(f"excluded {ns.metadata.name}")
+            continue
 
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):

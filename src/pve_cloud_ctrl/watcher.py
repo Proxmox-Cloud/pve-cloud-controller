@@ -25,7 +25,7 @@ def watch_namespaces():
     for event in w.stream(v1.list_namespace, resource_version=resource_version, timeout_seconds=60):
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
-        if event['object'].metadata.name in os.getenv("EXCLUDE_BASE_NAMESPACES").split(","):
+        if event['object'].metadata.name in os.getenv("EXCLUDE_TLS_NAMESPACES").split(","):
             logger.debug("excluding ns")
             logger.debug(event['object'].metadata.name)
             continue
