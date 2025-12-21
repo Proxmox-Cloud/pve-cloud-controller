@@ -2,16 +2,16 @@
 build_commands = [
   [
     "docker", "build", "--build-arg", "LOCAL_PYPI_IP=$REGISTRY_IP",
-    "--build-arg", "PY_PVE_CLOUD=$PY_PVE_CLOUD_VERSION",
+    "--build-arg", "INJECT_PY_PVE_CLOUD_VERSION=$PY_PVE_CLOUD_VERSION",
     ".", "-t", "$REGISTRY_IP:5000/pve-cloud-controller:$VERSION"
   ],
   [
     "docker", "push", "$REGISTRY_IP:5000/pve-cloud-controller:$VERSION"
   ]
 ]
-version_py_path = "src/pve_cloud_ctrl/_version.py"
+dyn_version_py_path = "src/pve_cloud_ctrl/_version.py"
+sub_rebuild_keys = [ "version.py-pve-cloud" ]
 
 [redis]
 version_key = "version.pve-cloud-controller"
-sub_rebuild_keys = [ "version.py-pve-cloud" ]
 env_key_mapping = { PY_PVE_CLOUD_VERSION = "version.py-pve-cloud"}

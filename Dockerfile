@@ -1,16 +1,22 @@
 FROM python:alpine3.19
-ARG PY_PVE_CLOUD=0.13.3
-ENV PY_PVE_CLOUD=${PY_PVE_CLOUD}
 
 # empty by default, using official pypi
-ARG LOCAL_PYPI_IP=
+ARG LOCAL_PYPI_IP
+ARG INJECT_PY_PVE_CLOUD_VERSION
 
 # install requirements in seperate layer
 COPY requirements.txt ./
 
-RUN pip install ${LOCAL_PYPI_IP:+--index-url http://$LOCAL_PYPI_IP:8088/simple }${LOCAL_PYPI_IP:+--trusted-host $LOCAL_PYPI_IP }-r requirements.txt
-
-RUN pip install ${LOCAL_PYPI_IP:+--index-url http://$LOCAL_PYPI_IP:8088/simple }${LOCAL_PYPI_IP:+--trusted-host $LOCAL_PYPI_IP }py-pve-cloud==$PY_PVE_CLOUD
+# todo: seperate in different layers for faster tdd rebuilds
+RUN if [ -n "$LOCAL_PYPI_IP" ] && [ -n "$INJECT_PY_PVE_CLOUD_VERSION" ]; then \
+        echo "Running tdd build"; \
+        grep -v 'py-pve-cloud' requirements.txt > filtered_requirements.txt && \
+        pip install --index-url http://$LOCAL_PYPI_IP:8088/simple --trusted-host $LOCAL_PYPI_IP -r filtered_requirements.txt && \
+        pip install --index-url http://$LOCAL_PYPI_IP:8088/simple --trusted-host $LOCAL_PYPI_IP py-pve-cloud==$INJECT_PY_PVE_CLOUD_VERSION; \
+    else \
+        echo "Running normal build"; \
+        pip install -r requirements.txt; \
+    fi
 
 # install the package
 COPY pyproject.toml ./

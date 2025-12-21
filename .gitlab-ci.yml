@@ -53,14 +53,12 @@ release_image:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
 
 
-downstream_tf_modules:
+downstream_tf_controller_module:
   stage: deploy
-  # no needs:, can trigger async
   trigger:
-    project: "pve-cloud/pve-cloud-tf"
+    project: "pve-cloud/terraform-proxmox-cloud-controller"
   variables:
     PVE_CLOUD_CONTROLLER: $CI_COMMIT_TAG
     UPSTREAM_TAG_MESSAGE: $CI_COMMIT_TAG_MESSAGE
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/' # semver
-
