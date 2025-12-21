@@ -57,7 +57,7 @@ release_image:
 downstream_tf_controller_module:
   stage: deploy
   trigger:
-    project: "pve-cloud/terraform-proxmox-cloud-controller"
+    project: "pve-cloud/terraform-pxc-controller"
   variables:
     PVE_CLOUD_CONTROLLER: $CI_COMMIT_TAG
     UPSTREAM_TAG_MESSAGE: $CI_COMMIT_TAG_MESSAGE
