@@ -1,6 +1,6 @@
 release_tag:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:2025121321
+  image: tobiashvmz/pve-cloud-ci:2025122113
   script:
     - pwd
     - /scripts/release-tag.sh
@@ -13,11 +13,12 @@ release_tag:
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:2025121321
+  image: tobiashvmz/pve-cloud-ci:2025122113
   script:
     # write the new version
-    - sed -i "s/^ARG PY_PVE_CLOUD=.*$/ARG PY_PVE_CLOUD=${PY_PVE_CLOUD}/" Dockerfile
-    - /scripts/upstream-push.sh "Update py-pve-cloud version to $PY_PVE_CLOUD"
+    - PESSIMISTIC_CONSTRAINT=$(/scripts/get-pessimistic-semver.sh $PY_PVE_CLOUD)
+    - sed -i "s/^py-pve-cloud>=.*$/py-pve-cloud>=${PY_PVE_CLOUD},<${PESSIMISTIC_CONSTRAINT}/" requirements.txt
+    - /scripts/upstream-push.sh "Update py-pve-cloud version to $PY_PVE_CLOUD (pessimistic)"
   rules:
     - if: ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
 
