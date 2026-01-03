@@ -52,6 +52,7 @@ release_image:
       fi
     - mkdir -p /root/.config/containers
     - echo $DOCKER_AUTH_CONFIG_B64 | base64 -d > /root/.config/containers/auth.json
+    - echo "__version__ = \"$CI_COMMIT_TAG\"" > src/pve_cloud_ctrl/_version.py 
     - podman build --layers --cache-from tobiashvmz/pve-cloud-controller-cache --cache-to tobiashvmz/pve-cloud-controller-cache -t tobiashvmz/pve-cloud-controller:$CI_COMMIT_TAG .
     - podman push tobiashvmz/pve-cloud-controller:$CI_COMMIT_TAG
   rules:
