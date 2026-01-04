@@ -1,11 +1,13 @@
-import os
-from kubernetes import client, config
-from sqlalchemy import select, create_engine
-from sqlalchemy.orm import Session
-from pve_cloud.orm.alchemy import AcmeX509
-from kubernetes.client.rest import ApiException
-import pve_cloud_ctrl.funcs as funcs
 import logging
+import os
+
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+from pve_cloud.orm.alchemy import AcmeX509
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+import pve_cloud_ctrl.funcs as funcs
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-cron")
@@ -22,10 +24,14 @@ def main():
     bind_domains = None
 
     # select bind domains for ingress dns reapply
-    if os.getenv("BIND_DNS_UPDATE_KEY") and os.getenv("BIND_MASTER_IP") and os.getenv("INTERNAL_PROXY_FIP"):
+    if (
+        os.getenv("BIND_DNS_UPDATE_KEY")
+        and os.getenv("BIND_MASTER_IP")
+        and os.getenv("INTERNAL_PROXY_FIP")
+    ):
         bind_domains = funcs.get_bind_domains()
 
-    ext_domains = funcs.get_ext_domains() # might be none
+    ext_domains = funcs.get_ext_domains()  # might be none
 
     # update certs and mirror pull secret
     with Session(engine) as session:
@@ -45,23 +51,26 @@ def main():
         logger.info(f"processing ingress {ns.metadata.name}")
 
         # reapply ingress dns
-        if os.getenv("BIND_DNS_UPDATE_KEY") and os.getenv("BIND_MASTER_IP") and os.getenv("INTERNAL_PROXY_FIP"):
+        if (
+            os.getenv("BIND_DNS_UPDATE_KEY")
+            and os.getenv("BIND_MASTER_IP")
+            and os.getenv("INTERNAL_PROXY_FIP")
+        ):
 
             ingresses = net_v1.list_namespaced_ingress(namespace=ns.metadata.name)
 
             for ingress in ingresses.items:
                 logger.info(ingress.metadata.name)
-                
+
                 if ingress.spec.rules:
                     for rule in ingress.spec.rules:
                         host = rule.host
 
                         errors = []
-                        errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host)) 
+                        errors.extend(funcs.set_ingress_dyn_dns(bind_domains, host))
                         errors.extend(funcs.set_ingress_ext_dyn_dns(ext_domains, host))
                         if errors:
                             raise Exception(", ".join(errors))
-
 
     # only cert and mirror is filtered
     for ns in namespaces.items:
@@ -78,16 +87,20 @@ def main():
                 pr = v1.patch_namespaced_secret(
                     name="cluster-tls",
                     namespace=ns.metadata.name,
-                    body={"stringData": cert.k8s}
+                    body={"stringData": cert.k8s},
                 )
                 logger.info("patched")
                 logger.info(pr)
             except ApiException as e:
                 # incase it doesnt exist try to create it
                 if e.status == 404:
-                    v1.create_namespaced_secret(namespace=ns.metadata.name, body=client.V1Secret(metadata=client.V1ObjectMeta(name='cluster-tls'),
-                        type="kubernetes.io/tls",
-                        string_data=cert.k8s)
+                    v1.create_namespaced_secret(
+                        namespace=ns.metadata.name,
+                        body=client.V1Secret(
+                            metadata=client.V1ObjectMeta(name="cluster-tls"),
+                            type="kubernetes.io/tls",
+                            string_data=cert.k8s,
+                        ),
                     )
                 else:
                     raise
@@ -102,17 +115,27 @@ def main():
 
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):
-            mirror_pull_secret = v1.read_namespaced_secret(os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"), "pve-cloud-controller")
+            mirror_pull_secret = v1.read_namespaced_secret(
+                os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"), "pve-cloud-controller"
+            )
             logger.info("mps")
             logger.info(mirror_pull_secret)
 
             try:
-                v1.create_namespaced_secret(namespace=ns.metadata.name, body=client.V1Secret(metadata=client.V1ObjectMeta(name='mirror-pull-secret'),
-                    type="kubernetes.io/dockerconfigjson",
-                    data=mirror_pull_secret.data)
+                v1.create_namespaced_secret(
+                    namespace=ns.metadata.name,
+                    body=client.V1Secret(
+                        metadata=client.V1ObjectMeta(name="mirror-pull-secret"),
+                        type="kubernetes.io/dockerconfigjson",
+                        data=mirror_pull_secret.data,
+                    ),
                 )
             except ApiException as e:
-                if e.status == 409: # conflict => update the secret
-                    v1.patch_namespaced_secret('mirror-pull-secret', namespace=ns.metadata.name, body={"data": mirror_pull_secret.data})
+                if e.status == 409:  # conflict => update the secret
+                    v1.patch_namespaced_secret(
+                        "mirror-pull-secret",
+                        namespace=ns.metadata.name,
+                        body={"data": mirror_pull_secret.data},
+                    )
                 else:
                     raise

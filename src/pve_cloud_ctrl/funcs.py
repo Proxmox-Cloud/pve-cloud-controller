@@ -1,17 +1,17 @@
-import os
-from sqlalchemy import select, create_engine
-from sqlalchemy.orm import Session
-from pve_cloud.orm.alchemy import BindDomains
-import dns.query
-import dns.update
-import dns.tsigkeyring
-import dns.rcode
-import boto3
-from botocore.exceptions import ClientError
-import json
 import fnmatch
+import json
 import logging
+import os
 
+import boto3
+import dns.query
+import dns.rcode
+import dns.tsigkeyring
+import dns.update
+from botocore.exceptions import ClientError
+from pve_cloud.orm.alchemy import BindDomains
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-funcs")
@@ -27,7 +27,7 @@ if route53_key_id and route53_secret_key:
             region_name=os.getenv("ROUTE53_REGION"),
             endpoint_url=os.getenv("ROUTE53_ENDPOINT_URL"),
             aws_access_key_id=route53_key_id,
-            aws_secret_access_key=route53_secret_key
+            aws_secret_access_key=route53_secret_key,
         )
     else:
         # use default endpoint (no e2e testing)
@@ -35,7 +35,7 @@ if route53_key_id and route53_secret_key:
             "route53",
             region_name=os.getenv("ROUTE53_REGION"),
             aws_access_key_id=route53_key_id,
-            aws_secret_access_key=route53_secret_key
+            aws_secret_access_key=route53_secret_key,
         )
 
 
@@ -57,11 +57,11 @@ def validate_host_allowed(host):
             if fnmatch.fnmatch(host, f"{name}.{zone}"):
                 allowed = True
                 break
-        
+
         if entry["apex_zone_san"] and zone == host:
             # if there was an apex san created it covers a host that equals the zone
-            allowed = True 
-    
+            allowed = True
+
     # return errors
     return allowed
 
@@ -75,11 +75,11 @@ def host_exposed(host):
             if fnmatch.fnmatch(host, f"{name}.{zone}"):
                 exposed = True
                 break
-        
+
         if entry["expose_apex"] and zone == host:
             # if there was an apex san created it covers a host that equals the zone
-            exposed = True 
-    
+            exposed = True
+
     return exposed
 
 
@@ -95,7 +95,7 @@ def get_bind_domains():
 
 def get_ext_domains():
     if not (route53_key_id and route53_secret_key):
-        return None # function will handle
+        return None  # function will handle
 
     # only implemented for route53 at the moment
     hosted_zones = boto_client.list_hosted_zones()["HostedZones"]
@@ -110,13 +110,15 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
 
     if ext_domains is None:
         return []
-    
+
     if not host_exposed(host):
-        return [] # we skip external dns for hosts that are not exposed
-    
+        return []  # we skip external dns for hosts that are not exposed
+
     matching_domain = None
     for domain in ext_domains:
-        if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified
+        if host.endswith(
+            domain[0].removesuffix(".")
+        ):  # boto domains are fully quantified
             matching_domain = domain
             break
 
@@ -135,7 +137,9 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
                             "Name": host + ".",
                             "Type": "A",
                             "TTL": 300,
-                            "ResourceRecords": [{"Value": os.getenv("EXTERNAL_FORWARDED_IP")}],
+                            "ResourceRecords": [
+                                {"Value": os.getenv("EXTERNAL_FORWARDED_IP")}
+                            ],
                         },
                     }
                 ]
@@ -152,13 +156,15 @@ def set_ingress_ext_dyn_dns(ext_domains, host):
 def delete_ingress_ext_dyn_dns(ext_domains, host):
     if ext_domains is None:
         return []
-    
+
     if not host_exposed(host):
-        return [] # we skip external dns for hosts that are not exposed
-    
+        return []  # we skip external dns for hosts that are not exposed
+
     matching_domain = None
     for domain in ext_domains:
-        if host.endswith(domain[0].removesuffix(".")): # boto domains are fully quantified
+        if host.endswith(
+            domain[0].removesuffix(".")
+        ):  # boto domains are fully quantified
             matching_domain = domain
             break
 
@@ -177,7 +183,9 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
                             "Name": host + ".",
                             "Type": "A",
                             "TTL": 300,
-                            "ResourceRecords": [{"Value": os.getenv("EXTERNAL_FORWARDED_IP")}],
+                            "ResourceRecords": [
+                                {"Value": os.getenv("EXTERNAL_FORWARDED_IP")}
+                            ],
                         },
                     }
                 ]
@@ -196,28 +204,33 @@ def set_ingress_dyn_dns(bind_domains, host):
     cluster_cert_covered = validate_host_allowed(host)
     if not cluster_cert_covered:
         return [f"Host {host} is not covered by the clusters certificate!"]
-        
+
     matching_domain = None
     for bind_domain in bind_domains:
         if host.endswith(bind_domain.domain):
             matching_domain = bind_domain.domain
             break
-    
+
     if matching_domain is None:
         logger.info(f"No authoratative domain found for host {host}")
         return []
 
     dns_update = dns.update.Update(
         matching_domain,
-        keyring=dns.tsigkeyring.from_text({
-            "internal.": os.getenv("BIND_DNS_UPDATE_KEY")
-        }),
+        keyring=dns.tsigkeyring.from_text(
+            {"internal.": os.getenv("BIND_DNS_UPDATE_KEY")}
+        ),
         keyname="internal.",
-        keyalgorithm="hmac-sha256"
+        keyalgorithm="hmac-sha256",
     )
 
     # set @ if ingress is for apex, else set the host extracted from full host - matching domain
-    dns_update.replace("@" if host == matching_domain else host.removesuffix("." + matching_domain), 300, "A", os.getenv("INTERNAL_PROXY_FIP"))
+    dns_update.replace(
+        "@" if host == matching_domain else host.removesuffix("." + matching_domain),
+        300,
+        "A",
+        os.getenv("INTERNAL_PROXY_FIP"),
+    )
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
 
     logger.info(response)
@@ -229,7 +242,6 @@ def set_ingress_dyn_dns(bind_domains, host):
         return []
 
 
-
 def delete_ingress_dyn_dns(bind_domains, host):
     # check domain exists in bind first
     matching_domain = None
@@ -237,7 +249,7 @@ def delete_ingress_dyn_dns(bind_domains, host):
         if host.endswith(bind_domain.domain):
             matching_domain = bind_domain.domain
             break
-    
+
     if matching_domain is None:
         logger.info(f"No authoratative domain found for host {host}")
         return []
@@ -245,15 +257,18 @@ def delete_ingress_dyn_dns(bind_domains, host):
     # create the update object
     dns_update = dns.update.Update(
         matching_domain,
-        keyring=dns.tsigkeyring.from_text({
-            "internal.": os.getenv("BIND_DNS_UPDATE_KEY")
-        }),
+        keyring=dns.tsigkeyring.from_text(
+            {"internal.": os.getenv("BIND_DNS_UPDATE_KEY")}
+        ),
         keyname="internal.",
-        keyalgorithm="hmac-sha256"
+        keyalgorithm="hmac-sha256",
     )
 
     # delete the record
-    dns_update.delete("@" if host == matching_domain else host.removesuffix("." + matching_domain), "A")
+    dns_update.delete(
+        "@" if host == matching_domain else host.removesuffix("." + matching_domain),
+        "A",
+    )
 
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
     logger.info(response)
