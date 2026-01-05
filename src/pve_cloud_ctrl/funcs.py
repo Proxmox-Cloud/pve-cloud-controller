@@ -20,7 +20,9 @@ logger = logging.getLogger("cloud-funcs")
 # init boto3 client if os vars are defined
 route53_key_id = os.getenv("ROUTE53_ACCESS_KEY_ID")
 route53_secret_key = os.getenv("ROUTE53_SECRET_ACCESS_KEY")
+
 if route53_key_id and route53_secret_key:
+    logger.debug("route53 env variables are defined, initializing boto client.")
     if os.getenv("ROUTE53_ENDPOINT_URL"):
         boto_client = boto3.client(
             "route53",
@@ -95,10 +97,13 @@ def get_bind_domains():
 
 def get_ext_domains():
     if not (route53_key_id and route53_secret_key):
+        logger.debug("returning none for get_ext_domains")
         return None  # function will handle
 
     # only implemented for route53 at the moment
     hosted_zones = boto_client.list_hosted_zones()["HostedZones"]
+
+    logger.debug(f"num hosted zones found {len(hosted_zones)}")
 
     return [(zone["Name"], zone["Id"]) for zone in hosted_zones]
 
@@ -197,6 +202,8 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
         return []
 
     except ClientError as e:
+        logger.info("error deleting ext dns")
+        logger.info(e)
         return [f"Error ext dns delete {e.response['Error']}"]
 
 
