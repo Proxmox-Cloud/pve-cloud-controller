@@ -50,6 +50,12 @@ def main():
     for ns in namespaces.items:
         logger.info(f"processing ingress {ns.metadata.name}")
 
+        if ns.status.phase != "Active":
+            logger.info(
+                f"skipping namespace {ns.metadata.name} (status={ns.status.phase})"
+            )
+            continue
+
         # reapply ingress dns
         if (
             os.getenv("BIND_DNS_UPDATE_KEY")
@@ -78,6 +84,12 @@ def main():
         # we still want to apply tls
         if ns.metadata.name in os.getenv("EXCLUDE_TLS_NAMESPACES").split(","):
             logger.debug(f"excluded {ns.metadata.name}")
+            continue
+
+        if ns.status.phase != "Active":
+            logger.info(
+                f"skipping namespace {ns.metadata.name} (status={ns.status.phase})"
+            )
             continue
 
         logger.info(f"processing certs {ns.metadata.name}")
@@ -113,6 +125,12 @@ def main():
             logger.debug(f"excluded {ns.metadata.name}")
             continue
 
+        if ns.status.phase != "Active":
+            logger.info(
+                f"skipping namespace {ns.metadata.name} (status={ns.status.phase})"
+            )
+            continue
+        
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):
             mirror_pull_secret = v1.read_namespaced_secret(

@@ -204,6 +204,15 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
     except ClientError as e:
         logger.info("error deleting ext dns")
         logger.info(e)
+
+        # ignore not found errors
+        error = e.response["Error"]
+        if (
+            error["Code"] == "InvalidChangeBatch"
+            and "not found" in error.get("Message", "").lower()
+        ):
+            return []
+    
         return [f"Error ext dns delete {e.response['Error']}"]
 
 
