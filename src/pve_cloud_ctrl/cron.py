@@ -130,7 +130,7 @@ def main():
                 f"skipping namespace {ns.metadata.name} (status={ns.status.phase})"
             )
             continue
-        
+
         # update or create mirror pull secret - might have been toggled on retroactively
         if os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME"):
             mirror_pull_secret = v1.read_namespaced_secret(

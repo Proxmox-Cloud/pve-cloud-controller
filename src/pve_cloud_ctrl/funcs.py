@@ -212,7 +212,7 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
             and "not found" in error.get("Message", "").lower()
         ):
             return []
-    
+
         return [f"Error ext dns delete {e.response['Error']}"]
 
 
