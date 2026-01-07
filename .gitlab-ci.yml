@@ -22,7 +22,7 @@ py_pve_cloud_upstream:
     # replace with rc version constraint
     # trigger rc release tag pipeline
     - |
-      if [[ "$UPSTREAM_TAG_MESSAGE" == "rc-*" ]]; then
+      if [[ "$UPSTREAM_TAG_MESSAGE" == rc-* ]]; then
 
         # find the / determine the rc tag bases on latest prod tag
         tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
