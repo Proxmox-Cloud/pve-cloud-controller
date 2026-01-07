@@ -51,7 +51,15 @@ py_pve_cloud_upstream:
 
         new_tag="$major.$minor.$patch"
 
-        # check if rc tag exists
+        # create / switch to the rc branch
+        git checkout ${new_tag}-rc 2>/dev/null || git checkout -b ${new_tag}-rc
+
+        git merge master # merge in recent changes in case its not up to date
+
+        # fix the version to the rcX
+        sed -i "s/^py-pve-cloud>=.*$/py-pve-cloud==${PY_PVE_CLOUD}/" requirements.txt
+
+        # create rc tag and propagate
         rc_tags=$(git tag -l | grep -E "^${new_tag}-rc[0-9]+$" || true)
 
         # create / increment
@@ -66,23 +74,23 @@ py_pve_cloud_upstream:
           rc_tag="${new_tag}-rc${next_rc}"
         fi
 
-        # determined rc tag now we create the branch if it doesnt exist
-        if git show-ref --verify --quiet "refs/heads/${new_tag}-rc"; then
-          # branch exists we check it out and increment our versions
-          git checkout ${new_tag}-rc
+        git push origin ${new_tag}-rc # push the full rc branch
 
-          git merge master # merge in current changes in case something changed
+        # rc tag and push
+        git tag "${rc_tag}" -m "$UPSTREAM_TAG_MESSAGE"
+        git push origin tag
 
-        else
-          echo "Local branch does not exist"
-        fi
+        sleep 10
 
+        # trigger rc build
+        curl --request POST \
+          --form "token=${CI_JOB_TOKEN}" \
+          --form "ref=${rc_tag}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
 
-
-
-
+        # exit for now (unclean)
+        exit 0
       fi
-
 
     # write the new version
     - PESSIMISTIC_CONSTRAINT=$(/scripts/get-pessimistic-semver.sh $PY_PVE_CLOUD)
@@ -126,7 +134,7 @@ release_image:
     - podman push tobiashvmz/pve-cloud-controller:$CI_COMMIT_TAG
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
-
+    - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+-rc\d+$/' # rcs
 
 downstream_tf_controller_module:
   stage: deploy
