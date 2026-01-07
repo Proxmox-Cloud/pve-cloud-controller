@@ -20,7 +20,7 @@ py_pve_cloud_upstream:
     # replace with rc version constraint
     # trigger rc release tag pipeline
     - |
-      if [[ "$UPSTREAM_TAG_MESSAGE" == *"-rc-"* ]]; then
+      if [[ "$UPSTREAM_TAG_MESSAGE" == *"-rc"* ]]; then
 
         # find the / determine the rc tag bases on latest prod tag
         tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
@@ -57,7 +57,7 @@ py_pve_cloud_upstream:
         git merge master # merge in recent changes in case its not up to date
 
         # fix the version to the rcX
-        sed -i "s/^py-pve-cloud>=.*$/py-pve-cloud==${PY_PVE_CLOUD}/" requirements.txt
+        sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD}/" requirements.txt
 
         # create rc tag and propagate
         rc_tags=$(git tag -l | grep -E "^${new_tag}-rc[0-9]+$" || true)
