@@ -15,6 +15,75 @@ py_pve_cloud_upstream:
   stage: build
   image: docker.io/tobiashvmz/pve-cloud-ci:2025122115
   script:
+    # check if the upstream is a rc version
+    # if rc version create rc branch if it exists / otherwise checkout and merge current changes in
+    # replace with rc version constraint
+    # trigger rc release tag pipeline
+    - |
+      if [[ "$UPSTREAM_TAG_MESSAGE" == *"-rc-"* ]]; then
+
+        # find the / determine the rc tag bases on latest prod tag
+        tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
+        if [ -z "$tags" ]; then
+          latest_tag="0.0.0"
+        else
+          latest_tag=$(echo "$tags" | sort -V | tail -n 1)
+        fi
+
+        # split the tag and increment
+        major=$(echo "$latest_tag" | cut -d '.' -f 1)
+        minor=$(echo "$latest_tag" | cut -d '.' -f 2)
+        patch=$(echo "$latest_tag" | cut -d '.' -f 3)
+
+        if [[ "$UPSTREAM_TAG_MESSAGE" == *"-major" ]]; then
+          major=$((major + 1))
+          minor=0
+          patch=0
+        elif [[ "$UPSTREAM_TAG_MESSAGE" == *"-minor" ]]; then
+          minor=$((minor + 1))
+          patch=0
+        elif [[ "$UPSTREAM_TAG_MESSAGE" == *"-patch" ]]; then
+          patch=$((patch + 1))
+        else
+          echo "Unknown increment type: $UPSTREAM_TAG_MESSAGE"
+          exit 1
+        fi
+
+        new_tag="$major.$minor.$patch"
+
+        # check if rc tag exists
+        rc_tags=$(git tag -l | grep -E "^${new_tag}-rc[0-9]+$" || true)
+
+        # create / increment
+        if [ -z "$rc_tags" ]; then
+          rc_tag="${new_tag}-rc0"
+        else
+          latest_rc=$(echo "$rc_tags" | sort -V | tail -n 1)
+          rc_num=${latest_rc##*-rc}   # removes everything up to last "-rc"
+          
+          next_rc=$((rc_num + 1))
+          
+          rc_tag="${new_tag}-rc${next_rc}"
+        fi
+
+        # determined rc tag now we create the branch if it doesnt exist
+        if git show-ref --verify --quiet "refs/heads/${new_tag}-rc"; then
+          # branch exists we check it out and increment our versions
+          git checkout ${new_tag}-rc
+
+          git merge master # merge in current changes in case something changed
+
+        else
+          echo "Local branch does not exist"
+        fi
+
+
+
+
+
+      fi
+
+
     # write the new version
     - PESSIMISTIC_CONSTRAINT=$(/scripts/get-pessimistic-semver.sh $PY_PVE_CLOUD)
     - sed -i "s/^py-pve-cloud>=.*$/py-pve-cloud>=${PY_PVE_CLOUD},<${PESSIMISTIC_CONSTRAINT}/" requirements.txt
