@@ -16,6 +16,7 @@ rc_tag:
     - if: '$CI_COMMIT_TAG =~ /^rc-[a-z]+$/'
   resource_group: deploy-prod
 
+
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
@@ -42,6 +43,7 @@ py_pve_cloud_rc_upstream:
     - /scripts/upstream-push.sh "Set py-pve-cloud rc version to ${PY_PVE_CLOUD//-/}" "${new_tag}-rc"
   rules:
     - if: '$PY_PVE_CLOUD != null && $PY_PVE_CLOUD != "" && $UPSTREAM_TAG_MESSAGE =~ /^rc-.*/' # set by upstream, trigger for rc release
+
 
 # actual image build and release
 release_image:
@@ -82,7 +84,6 @@ format_source:
   script:
     - git config --global user.name "$GITLAB_USER_NAME"
     - git config --global user.email "$GITLAB_USER_EMAIL"
-    
     - autoflake --in-place --recursive .
     - black .
     - isort .
