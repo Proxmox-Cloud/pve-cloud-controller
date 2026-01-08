@@ -1,23 +1,3 @@
-release_tag:
-  stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601081028
-  script:
-    - /scripts/release-tag.sh
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^release-[a-z]+$/'
-  resource_group: deploy-prod
-
-rc_tag:
-  stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601081028
-  script:
-    - /scripts/rc-tag.sh
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^rc-[a-z]+$/'
-  resource_group: deploy-prod
-
-
-# pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
   image: docker.io/tobiashvmz/pve-cloud-ci:202601081028
@@ -44,6 +24,23 @@ py_pve_cloud_rc_upstream:
   rules:
     - if: '$PY_PVE_CLOUD != null && $PY_PVE_CLOUD != "" && $UPSTREAM_TAG_MESSAGE =~ /^rc-.*/' # set by upstream, trigger for rc release
 
+release_tag:
+  stage: build
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601081028
+  script:
+    - /scripts/release-tag.sh
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^release-[a-z]+$/'
+  resource_group: deploy-prod
+
+rc_tag:
+  stage: build
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601081028
+  script:
+    - /scripts/rc-tag.sh
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^rc-[a-z]+$/'
+  resource_group: deploy-prod
 
 # actual image build and release
 release_image:
