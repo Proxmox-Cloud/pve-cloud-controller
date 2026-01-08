@@ -34,6 +34,10 @@ py_pve_cloud_rc_upstream:
   stage: build
   image: docker.io/tobiashvmz/pve-cloud-ci:202601080940
   script:
+    # set config based on the current commit for auto commit
+    - git config --global user.name "$GITLAB_USER_NAME"
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+
     - new_tag=$(/scripts/get-new-tag.sh)
     - echo $new_tag
 
