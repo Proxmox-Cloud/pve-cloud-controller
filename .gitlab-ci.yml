@@ -24,6 +24,10 @@ py_pve_cloud_upstream:
     - |
       if [[ "$UPSTREAM_TAG_MESSAGE" == rc-* ]]; then
 
+        # set config based on the current commit for auto commit
+        git config --global user.name "$GITLAB_USER_NAME"
+        git config --global user.email "$GITLAB_USER_EMAIL"
+
         # find the / determine the rc tag bases on latest prod tag
         tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
         if [ -z "$tags" ]; then
