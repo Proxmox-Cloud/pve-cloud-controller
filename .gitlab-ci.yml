@@ -58,7 +58,8 @@ py_pve_cloud_upstream:
         new_tag="$major.$minor.$patch"
 
         # create / switch to the rc branch
-        git checkout ${new_tag}-rc 2>/dev/null || git checkout -b ${new_tag}-rc
+        git fetch origin # fetch existing branches
+        git checkout -B ${new_tag}-rc origin/${new_tag}-rc 2>/dev/null || git checkout -b ${new_tag}-rc
 
         git merge $CI_COMMIT_SHA # merge in recent changes in case its not up to date
 
