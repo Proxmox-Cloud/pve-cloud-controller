@@ -28,6 +28,8 @@ py_pve_cloud_upstream:
         git config --global user.name "$GITLAB_USER_NAME"
         git config --global user.email "$GITLAB_USER_EMAIL"
 
+        git fetch --tags # fetch tags
+
         # find the / determine the rc tag bases on latest prod tag
         tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
         echo $tags
