@@ -56,7 +56,7 @@ py_pve_cloud_upstream:
         # create / switch to the rc branch
         git checkout ${new_tag}-rc 2>/dev/null || git checkout -b ${new_tag}-rc
 
-        git merge master # merge in recent changes in case its not up to date
+        git merge $CI_COMMIT_SHA # merge in recent changes in case its not up to date
 
         # fix the version to the rcX
         sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD}/" requirements.txt
