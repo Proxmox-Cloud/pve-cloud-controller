@@ -63,11 +63,11 @@ py_pve_cloud_upstream:
         git merge $CI_COMMIT_SHA # merge in recent changes in case its not up to date
 
         # fix the version to the rcX
-        sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD}/" requirements.txt
+        sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD//-/}/" requirements.txt
 
         git add requirements.txt
 
-        git commit -m "Set py-pve-cloud rc version to ${PY_PVE_CLOUD}"
+        git commit -m "Set py-pve-cloud rc version to ${PY_PVE_CLOUD//-/}"
 
         # create rc tag and propagate
         rc_tags=$(git tag -l | grep -E "^${new_tag}-rc[0-9]+$" || true)
