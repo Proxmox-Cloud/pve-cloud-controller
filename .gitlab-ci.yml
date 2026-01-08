@@ -1,6 +1,6 @@
 release_tag:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601080940
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601080950
   script:
     - /scripts/release-tag.sh
   rules:
@@ -9,7 +9,7 @@ release_tag:
 
 rc_release_tag:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601080940
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601080950
   script:
     - /scripts/rc-release-tag.sh
   rules:
@@ -20,7 +20,7 @@ rc_release_tag:
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601080940
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601080950
   script:
     # write the new version
     - PESSIMISTIC_CONSTRAINT=$(/scripts/get-pessimistic-semver.sh $PY_PVE_CLOUD)
@@ -32,7 +32,7 @@ py_pve_cloud_upstream:
 
 py_pve_cloud_rc_upstream:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:202601080940
+  image: docker.io/tobiashvmz/pve-cloud-ci:202601080950
   script:
     # set config based on the current commit for auto commit
     - git config --global user.name "$GITLAB_USER_NAME"
@@ -52,17 +52,17 @@ py_pve_cloud_rc_upstream:
 
 
 # call the pipeline for the release patch tag we just created above - not included in default pipelines
-trigger_upstream_release_tag:
-  stage: deploy
-  image: alpine/curl:8.14.1
-  script:
-    - |
-      curl --request POST \
-        --form "token=${CI_JOB_TOKEN}" \
-        --form "ref=${UPSTREAM_TAG_MESSAGE}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
-  rules:
-    - if: $UPSTREAM_TAG_MESSAGE =~ /-all-/ && ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
+# trigger_upstream_release_tag:
+#   stage: deploy
+#   image: alpine/curl:8.14.1
+#   script:
+#     - |
+#       curl --request POST \
+#         --form "token=${CI_JOB_TOKEN}" \
+#         --form "ref=${UPSTREAM_TAG_MESSAGE}" \
+#         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
+#   rules:
+#     - if: $UPSTREAM_TAG_MESSAGE =~ /-all-/ && ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
 
 
 # actual image build and release
