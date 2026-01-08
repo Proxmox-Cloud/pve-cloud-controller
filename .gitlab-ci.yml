@@ -7,7 +7,7 @@ release_tag:
     - if: '$CI_COMMIT_TAG =~ /^release-[a-z]+$/'
   resource_group: deploy-prod
 
-rc_tag:
+rc_release_tag:
   stage: build
   image: docker.io/tobiashvmz/pve-cloud-ci:202601080935
   script:
