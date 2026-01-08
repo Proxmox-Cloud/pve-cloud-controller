@@ -84,7 +84,7 @@ py_pve_cloud_upstream:
 
         # rc tag and push
         git tag "${rc_tag}" -m "$UPSTREAM_TAG_MESSAGE"
-        git push origin tag
+        git push origin "${rc_tag}"
 
         sleep 10
 
