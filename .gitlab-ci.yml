@@ -1,124 +1,50 @@
 release_tag:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:2025122115
+  image: docker.io/tobiashvmz/pve-cloud-ci:2026010808
   script:
-    - pwd
     - /scripts/release-tag.sh
   rules:
     - if: '$CI_COMMIT_TAG =~ /^release-[a-z]+$/'
-    - if: '$CI_COMMIT_TAG =~ /^release-all-[a-z]+$/'
+  resource_group: deploy-prod
+
+rc_tag:
+  stage: build
+  image: docker.io/tobiashvmz/pve-cloud-ci:2026010808
+  script:
+    - /scripts/rc-release-tag.sh
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^rc-release-[a-z]+$/'
   resource_group: deploy-prod
 
 
 # pipeline trigger if the upstream releases
 py_pve_cloud_upstream:
   stage: build
-  image: docker.io/tobiashvmz/pve-cloud-ci:2025122115
+  image: docker.io/tobiashvmz/pve-cloud-ci:2026010808
   script:
-    - echo $UPSTREAM_TAG_MESSAGE
-    - echo $PY_PVE_CLOUD
-    # check if the upstream is a rc version
-    # if rc version create rc branch if it exists / otherwise checkout and merge current changes in
-    # replace with rc version constraint
-    # trigger rc release tag pipeline
-    - |
-      if [[ "$UPSTREAM_TAG_MESSAGE" == rc-* ]]; then
-
-        # set config based on the current commit for auto commit
-        git config --global user.name "$GITLAB_USER_NAME"
-        git config --global user.email "$GITLAB_USER_EMAIL"
-
-        git fetch --tags # fetch tags
-
-        # find the / determine the rc tag bases on latest prod tag
-        tags=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
-        echo $tags
-        if [ -z "$tags" ]; then
-          latest_tag="0.0.0"
-        else
-          latest_tag=$(echo "$tags" | sort -V | tail -n 1)
-        fi
-
-        echo $latest_tag
-
-        # split the tag and increment
-        major=$(echo "$latest_tag" | cut -d '.' -f 1)
-        minor=$(echo "$latest_tag" | cut -d '.' -f 2)
-        patch=$(echo "$latest_tag" | cut -d '.' -f 3)
-
-        if [[ "$UPSTREAM_TAG_MESSAGE" == *"-major" ]]; then
-          major=$((major + 1))
-          minor=0
-          patch=0
-        elif [[ "$UPSTREAM_TAG_MESSAGE" == *"-minor" ]]; then
-          minor=$((minor + 1))
-          patch=0
-        elif [[ "$UPSTREAM_TAG_MESSAGE" == *"-patch" ]]; then
-          patch=$((patch + 1))
-        else
-          echo "Unknown increment type: $UPSTREAM_TAG_MESSAGE"
-          exit 1
-        fi
-
-        new_tag="$major.$minor.$patch"
-        echo $new_tag
-
-        # create / switch to the rc branch
-        git fetch origin # fetch existing branches
-        git checkout -B ${new_tag}-rc origin/${new_tag}-rc 2>/dev/null || git checkout -b ${new_tag}-rc
-
-        git merge $CI_COMMIT_SHA # merge in recent changes in case its not up to date
-
-        # fix the version to the rcX
-        sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD//-/}/" requirements.txt
-
-        git add requirements.txt
-
-        git commit -m "Set py-pve-cloud rc version to ${PY_PVE_CLOUD//-/}"
-
-        # create rc tag and propagate
-        rc_tags=$(git tag -l | grep -E "^${new_tag}-rc[0-9]+$" || true)
-
-        echo $rc_tags
-
-        # create / increment
-        if [ -z "$rc_tags" ]; then
-          rc_tag="${new_tag}-rc0"
-        else
-          latest_rc=$(echo "$rc_tags" | sort -V | tail -n 1)
-          rc_num=${latest_rc##*-rc}   # removes everything up to last "-rc"
-          
-          next_rc=$((rc_num + 1))
-          
-          rc_tag="${new_tag}-rc${next_rc}"
-        fi
-
-        echo $rc_tag
-
-        git push origin ${new_tag}-rc # push the full rc branch
-
-        # rc tag and push
-        git tag "${rc_tag}" -m "$UPSTREAM_TAG_MESSAGE"
-        git push origin "${rc_tag}"
-
-        sleep 10
-
-        # trigger rc build
-        curl --request POST \
-          --form "token=${CI_JOB_TOKEN}" \
-          --form "ref=${rc_tag}" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
-
-        # exit for now (unclean)
-        exit 0
-      fi
-
     # write the new version
     - PESSIMISTIC_CONSTRAINT=$(/scripts/get-pessimistic-semver.sh $PY_PVE_CLOUD)
     - sed -i "s/^py-pve-cloud>=.*$/py-pve-cloud>=${PY_PVE_CLOUD},<${PESSIMISTIC_CONSTRAINT}/" requirements.txt
     - /scripts/upstream-push.sh "Update py-pve-cloud version to $PY_PVE_CLOUD (pessimistic)"
   rules:
-    - if: ( $PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./ ) # set by upstream
+    - if: ( ($PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./) && $UPSTREAM_TAG_MESSAGE == release-* ) # set by upstream only trigger on full release
+
+
+py_pve_cloud_rc_upstream:
+  stage: build
+  image: docker.io/tobiashvmz/pve-cloud-ci:2026010808
+  script:
+    - new_tag=$(/scripts/get-new-tag.sh)
+    - echo $new_tag
+
+    # switch to rc branch
+    - /scripts/rc-branch.sh $new_tag
+
+    # set rc version for py-pve-cloud-dependency
+    - sed -i "s/^py-pve-cloud.*$/py-pve-cloud==${PY_PVE_CLOUD//-/}/" requirements.txt
+    - /scripts/upstream-push.sh "Set py-pve-cloud rc version to ${PY_PVE_CLOUD//-/}" "${new_tag}-rc"
+  rules:
+    - if: ( ($PY_PVE_CLOUD != null || $PY_PVE_CLOUD =~ /^./) && $UPSTREAM_TAG_MESSAGE == rc-* ) # set by upstream, trigger for rc release
 
 
 # call the pipeline for the release patch tag we just created above - not included in default pipelines
@@ -190,8 +116,9 @@ format_source:
   rules:
     - if: >
         $CI_COMMIT_TAG !~ /^\d+\.\d+\.\d+$/ &&
+        $CI_COMMIT_TAG !~ /^\d+\.\d+\.\d+-rc\d+$/ &&
         $CI_COMMIT_TAG !~ /^release-[a-z]+$/ &&
-        $CI_COMMIT_TAG !~ /^release-all-[a-z]+$/ &&
+        $CI_COMMIT_TAG !~ /^rc-release-[a-z]+$/ &&
         $CI_PIPELINE_SOURCE == 'push'
       when: on_success
     - when: never
