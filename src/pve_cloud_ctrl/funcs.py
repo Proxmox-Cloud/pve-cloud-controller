@@ -60,7 +60,7 @@ def validate_host_allowed(host):
                 allowed = True
                 break
 
-        if entry["apex_zone_san"] and zone == host:
+        if "apex_zone_san" in entry and entry["apex_zone_san"] and zone == host:
             # if there was an apex san created it covers a host that equals the zone
             allowed = True
 
@@ -78,7 +78,7 @@ def host_exposed(host):
                 exposed = True
                 break
 
-        if entry["expose_apex"] and zone == host:
+        if "expose_apex" in entry and entry["expose_apex"] and zone == host:
             # if there was an apex san created it covers a host that equals the zone
             exposed = True
 
