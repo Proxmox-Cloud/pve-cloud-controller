@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import time
 from pprint import pformat
 
@@ -7,7 +8,6 @@ from kubernetes import client, config, watch
 from pve_cloud.orm.alchemy import AcmeX509
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-import subprocess
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-watcher")
@@ -49,7 +49,7 @@ def watch_pods():
 
             if pod.spec.init_containers:
                 images.extend(c.image for c in pod.spec.init_containers)
-            
+
             for image in images:
                 if image.startswith(harbor_host):
                     image_splits = image.trimprefix(f"{harbor_host}/").split("/")
@@ -63,24 +63,19 @@ def watch_pods():
                         # found a cached repository image, we simply use skopeo to copy it to the full mirror
                         # skopeo is smart about reading / writing layers and doesnt use disk
                         command = [
-                            "skopeo", "copy", 
-                            "--src-creds", f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
-                            "--dest-creds", f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
+                            "skopeo",
+                            "copy",
+                            "--src-creds",
+                            f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
+                            "--dest-creds",
+                            f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
                             f"docker://{image}",
-                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.trimsuffix("-cache")}/{image_stripped}"
+                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.trimsuffix("-cache")}/{image_stripped}",
                         ]
 
                         logger.info(command)
 
-                        subprocess.run(
-                            command,
-                            text=True,
-                            check=True
-                        )
-
-
-
-
+                        subprocess.run(command, text=True, check=True)
 
                     # image from cache / mirror
 
