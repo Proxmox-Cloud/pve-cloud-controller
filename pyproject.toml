@@ -14,7 +14,8 @@ dependencies = {file = ["requirements.txt"]}
 version = {attr = "pve_cloud_ctrl._version.__version__"}
 
 [project.scripts]
-watcher = "pve_cloud_ctrl.watcher:main"
+ns-watcher = "pve_cloud_ctrl.ns_watcher:main"
+pod-watcher = "pve_cloud_ctrl.pod_watcher:main"
 adm = "pve_cloud_ctrl.adm:main"
 cron = "pve_cloud_ctrl.cron:main"
 

@@ -27,23 +27,27 @@ def get_patched_image(image):
     if "bitnami/" in image:
         image = image.replace("bitnami/", "bitnamilegacy/")
 
+
+    # first we check if the image is present in the harbor full mirror repository
+
+
     registry = image.split("/")[0]
     if registry == "quay.io":
-        patched_image = f"{patch_registry}/quay-mirror/{image.removeprefix('quay.io/')}"
+        patched_image = f"{patch_registry}/quay-cache/{image.removeprefix('quay.io/')}"
     elif registry == "public.ecr.aws":
         patched_image = (
-            f"{patch_registry}/aws-ecr-mirror/{image.removeprefix('public.ecr.aws/')}"
+            f"{patch_registry}/aws-ecr-cache/{image.removeprefix('public.ecr.aws/')}"
         )
     elif registry == "ghcr.io":
         patched_image = (
-            f"{patch_registry}/github-mirror/{image.removeprefix('ghcr.io/')}"
+            f"{patch_registry}/github-cache/{image.removeprefix('ghcr.io/')}"
         )
     elif (
         registry == "docker.io" or "." not in registry
     ):  # default docker hub registry . not in means its path
         # default docker.io
         patched_image = (
-            f"{patch_registry}/docker-hub-mirror/{image.removeprefix('docker.io/')}"
+            f"{patch_registry}/docker-hub-cache/{image.removeprefix('docker.io/')}"
         )
     else:
         patched_image = image
