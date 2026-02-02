@@ -52,7 +52,7 @@ def watch_pods():
 
             for image in images:
                 if image.startswith(harbor_host):
-                    image_splits = image.trimprefix(f"{harbor_host}/").split("/")
+                    image_splits = image.removeprefix(f"{harbor_host}/").split("/")
                     harbor_repository = image_splits[0]
                     image_stripped = "/".join(image_splits[1:])
 
@@ -70,7 +70,7 @@ def watch_pods():
                             "--dest-creds",
                             f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
                             f"docker://{image}",
-                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.trimsuffix("-cache")}/{image_stripped}",
+                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.removesuffix("-cache")}/{image_stripped}"
                         ]
 
                         logger.info(command)
