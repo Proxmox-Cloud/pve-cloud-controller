@@ -70,7 +70,7 @@ def watch_pods():
                             "--dest-creds",
                             f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
                             f"docker://{image}",
-                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.removesuffix("-cache")}/{image_stripped}"
+                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.removesuffix("-cache")}/{image_stripped}",
                         ]
 
                         logger.info(command)
