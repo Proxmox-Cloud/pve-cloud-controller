@@ -27,9 +27,7 @@ def get_patched_image(image):
     if "bitnami/" in image:
         image = image.replace("bitnami/", "bitnamilegacy/")
 
-
     # first we check if the image is present in the harbor full mirror repository
-
 
     registry = image.split("/")[0]
     if registry == "quay.io":

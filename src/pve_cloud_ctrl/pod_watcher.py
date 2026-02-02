@@ -23,12 +23,14 @@ def watch_pods():
     w = watch.Watch()
 
     for event in w.stream(
-        v1.list_pod_for_all_namespaces, resource_version=resource_version, timeout_seconds=60
+        v1.list_pod_for_all_namespaces,
+        resource_version=resource_version,
+        timeout_seconds=60,
     ):
         # we only want to watch pods in namespaces that have mirroring active
-        if event["object"].metadata.name in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(
-            ","
-        ):
+        if event["object"].metadata.name in os.getenv(
+            "EXCLUDE_MIRROR_NAMESPACES"
+        ).split(","):
             logger.debug("excluding ns")
             logger.debug(event["object"].metadata.name)
             continue
@@ -38,9 +40,6 @@ def watch_pods():
         # we watch pods for going into phase running
         # this means the mirroring is done and we can push the artifact fully into our
         # cloud-mirror repository retagged
-
-
-
 
 
 def main():
