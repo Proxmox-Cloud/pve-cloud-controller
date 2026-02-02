@@ -37,7 +37,7 @@ def watch_pods():
             logger.debug("excluding ns")
             logger.debug(pod.metadata.namespace)
             continue
-        
+
         logger.info(pod.metadata.name)
         logger.debug(pformat(event))
 
@@ -45,9 +45,11 @@ def watch_pods():
         # this means the mirroring is done and we can push the artifact fully into our
         # cloud-mirror repository retagged
         container_ready = all(cs.ready for cs in pod.status.container_statuses)
-        init_container_ready = not pod.status.init_container_statuses or all(cs.ready for cs in pod.status.init_container_statuses)
+        init_container_ready = not pod.status.init_container_statuses or all(
+            cs.ready for cs in pod.status.init_container_statuses
+        )
         if pod.status.phase == "Running" and container_ready and init_container_ready:
-            
+
             images = [c.image for c in pod.spec.containers]
 
             if pod.spec.init_containers:
