@@ -7,6 +7,7 @@ from kubernetes import client, config, watch
 from pve_cloud.orm.alchemy import AcmeX509
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+import subprocess
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-watcher")
@@ -32,9 +33,9 @@ def watch_pods():
         pod = event["object"]
 
         # we only want to watch pods in namespaces that have mirroring active
-        if pod.metadata.name in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(","):
+        if pod.metadata.namespace in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(","):
             logger.debug("excluding ns")
-            logger.debug(pod.metadata.name)
+            logger.debug(pod.metadata.namespace)
             continue
 
         logger.debug(pformat(event))
@@ -48,6 +49,40 @@ def watch_pods():
 
             if pod.spec.init_containers:
                 images.extend(c.image for c in pod.spec.init_containers)
+            
+            for image in images:
+                if image.startswith(harbor_host):
+                    image_splits = image.trimprefix(f"{harbor_host}/").split("/")
+                    harbor_repository = image_splits[0]
+                    image_stripped = "/".join(image_splits[1:])
+
+                    logger.info(harbor_repository)
+                    logger.info(image_stripped)
+
+                    if harbor_repository.endswith("-cache"):
+                        # found a cached repository image, we simply use skopeo to copy it to the full mirror
+                        # skopeo is smart about reading / writing layers and doesnt use disk
+                        command = [
+                            "skopeo", "copy", 
+                            "--src-creds", f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
+                            "--dest-creds", f"{os.getenv("HARBOR_ADMIN_USER")}:{os.getenv("HARBOR_ADMIN_PASSWORD")}",
+                            f"docker://{image}",
+                            f"docker://{harbor_host}/cloud-mirror/{harbor_repository.trimsuffix("-cache")}/{image_stripped}"
+                        ]
+
+                        logger.info(command)
+
+                        subprocess.run(
+                            command,
+                            text=True,
+                            check=True
+                        )
+
+
+
+
+
+                    # image from cache / mirror
 
             # if image starts with cache host
 
