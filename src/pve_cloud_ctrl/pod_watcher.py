@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-watcher")
 
+harbor_host = os.getenv("HARBOR_MIRROR_HOST")
 
 def watch_pods():
     config.load_incluster_config()
@@ -27,12 +28,14 @@ def watch_pods():
         resource_version=resource_version,
         timeout_seconds=60,
     ):
+        pod = event['object']
+
         # we only want to watch pods in namespaces that have mirroring active
-        if event["object"].metadata.name in os.getenv(
-            "EXCLUDE_MIRROR_NAMESPACES"
-        ).split(","):
+        if pod.metadata.name in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(
+            ","
+        ):
             logger.debug("excluding ns")
-            logger.debug(event["object"].metadata.name)
+            logger.debug(pod.metadata.name)
             continue
 
         logger.debug(pformat(event))
@@ -40,6 +43,23 @@ def watch_pods():
         # we watch pods for going into phase running
         # this means the mirroring is done and we can push the artifact fully into our
         # cloud-mirror repository retagged
+        if pod.status.phase == "Running":
+            
+            images = [c.image for c in pod.spec.containers]
+            
+            if pod.spec.init_containers:
+                images.extend(c.image for c in pod.spec.init_containers)
+            
+            # if image starts with cache host
+
+            # if repository name ends with -cache, retag the image to the cloud-mirror repository
+
+            # push it to /cloud-mirror/ + repository trimmed -cache / image path
+            logger.info(pformat(images))
+
+
+
+            
 
 
 def main():

@@ -3,6 +3,9 @@ FROM python:alpine3.19
 # empty by default, using official pypi
 ARG LOCAL_PYPI_IP
 
+# install skopeo for mirroring features
+RUN apk add --no-cache skopeo
+
 # install requirements in seperate layer
 COPY requirements.txt ./
 
