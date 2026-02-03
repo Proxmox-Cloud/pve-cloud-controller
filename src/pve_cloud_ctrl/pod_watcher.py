@@ -101,5 +101,5 @@ def main():
             logger.debug("watching namespaces")
             watch_pods()
         except Exception as e:
-            logger.error(f"[!] Error in watcher loop: {e} - {type(e)}")
+            logger.error(f"[!] Error in watcher loop: {e} - {type(e)}", exc_info=True)
             time.sleep(5)
