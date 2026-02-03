@@ -6,16 +6,13 @@ from pprint import pformat
 
 from cachetools import TTLCache
 from kubernetes import client, config, watch
-from pve_cloud.orm.alchemy import AcmeX509
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-watcher")
 
 harbor_host = os.getenv("HARBOR_MIRROR_HOST")
 
-
+# todo: for completeness sake this should also be done by the cron job
 def watch_pods():
     config.load_incluster_config()
     v1 = client.CoreV1Api()

@@ -21,6 +21,76 @@ v1 = client.CoreV1Api()
 net_v1 = client.NetworkingV1Api()
 
 
+# we add cluster-pull-secret to every service account that is created and called
+# by the hook (definition filters namespaces)
+@app.route("/mutate-sa", methods=["POST"])
+def mutate_sa():
+
+    admission_review = request.get_json()
+
+    uid = admission_review["request"]["uid"]
+
+    namespace = admission_review["request"]["namespace"]
+    serviceaccount = admission_review['request']['object']
+
+    # first we check if the cluster-pull-secret is present in the namespace
+    # with the fitting "pve-cloud-pull-secret": "sa-inject" annotation
+    try:
+        secret = v1.read_namespaced_secret(name="cluster-pull-secret", namespace=namespace)
+        
+        if secret.metadata.annotations and "pve-cloud-pull-secret" in secret.metadata.annotations and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject":
+            logger.info(f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {serviceaccount.metadata.name}")
+
+            patches = []
+
+            if "imagePullSecrets" in serviceaccount:
+                patches.append(                        {
+                                    "op": "add",
+                                    "path": "/imagePullSecrets/-",
+                                    "value": {"name": "cluster-pull-secret"},
+                    })
+            else:
+                patches.append(                        {
+                                    "op": "add",
+                                    "path": "/imagePullSecrets",
+                                    "value": [{"name": "cluster-pull-secret"}],
+                    })    
+                
+            response = {
+                "apiVersion": "admission.k8s.io/v1",
+                "kind": "AdmissionReview",
+                "response": {
+                    "uid": uid,
+                    "allowed": True,
+                    "patchType": "JSONPatch",
+                    "patch": base64.b64encode(
+                        json.dumps(patches).encode("utf-8")
+                    ).decode("utf-8"),
+                },
+            }
+
+            return jsonify(response)
+        
+    except ApiException as e:
+        if e.status != 404:
+            raise # other than 404 return is undefined behaviour => crash the controller
+
+    # fallback is simply allowing and not patching anything
+    response = {
+        "apiVersion": "admission.k8s.io/v1",
+        "kind": "AdmissionReview",
+        "response": {
+            "uid": uid,
+            "allowed": True,  # Allow the request without modifications
+        },
+    }
+
+    return jsonify(response)
+
+
+
+
+
 # translates registry entry of image into harbor equivalent
 # from the harbor-mirror-projects terraform module
 def get_harbor_repo(registry, image):
