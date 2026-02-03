@@ -47,7 +47,7 @@ def watch_pods():
         # we watch pods for going into phase running
         # this means the mirroring is done and we can push the artifact fully into our
         # cloud-mirror repository retagged
-        container_ready = all(cs.ready for cs in pod.status.container_statuses)
+        container_ready = pod.status.container_statuses and all(cs.ready for cs in pod.status.container_statuses)
         init_container_ready = not pod.status.init_container_statuses or all(
             cs.ready for cs in pod.status.init_container_statuses
         )
