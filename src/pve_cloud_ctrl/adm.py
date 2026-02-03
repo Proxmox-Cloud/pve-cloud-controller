@@ -9,6 +9,7 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 import pve_cloud_ctrl.funcs as funcs
+import subprocess
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-adm")
@@ -20,6 +21,21 @@ v1 = client.CoreV1Api()
 net_v1 = client.NetworkingV1Api()
 
 
+# translates registry entry of image into harbor equivalent
+# from the harbor-mirror-projects terraform module
+def get_harbor_repo(registry, image):
+    if registry == "quay.io":
+        return "quay", image.removeprefix('quay.io/')
+    elif registry == "public.ecr.aws":
+        return "aws-ecr", image.removeprefix('public.ecr.aws/')
+    elif registry == "ghcr.io":
+        return "github", image.removeprefix('ghcr.io/')
+    elif (registry == "docker.io" or "." not in registry):
+        return "docker-hub", image.removeprefix('docker.io/')
+    else:
+        return None, None
+    
+
 def get_patched_image(image):
     patch_registry = os.getenv("HARBOR_MIRROR_HOST")
 
@@ -28,27 +44,30 @@ def get_patched_image(image):
         image = image.replace("bitnami/", "bitnamilegacy/")
 
     # first we check if the image is present in the harbor full mirror repository
-
     registry = image.split("/")[0]
-    if registry == "quay.io":
-        patched_image = f"{patch_registry}/quay-cache/{image.removeprefix('quay.io/')}"
-    elif registry == "public.ecr.aws":
-        patched_image = (
-            f"{patch_registry}/aws-ecr-cache/{image.removeprefix('public.ecr.aws/')}"
-        )
-    elif registry == "ghcr.io":
-        patched_image = (
-            f"{patch_registry}/github-cache/{image.removeprefix('ghcr.io/')}"
-        )
-    elif (
-        registry == "docker.io" or "." not in registry
-    ):  # default docker hub registry . not in means its path
-        # default docker.io
-        patched_image = (
-            f"{patch_registry}/docker-hub-cache/{image.removeprefix('docker.io/')}"
-        )
+
+    harbor_repo, stripped_image = get_harbor_repo(registry, image)
+
+    if harbor_repo:
+        # use skopeo to check if the image already exists as a full mirror
+        command = [
+            "skopeo", "inspect", "--creds", 
+            f"{os.getenv("HARBOR_MIRROR_USER")}:{os.getenv("HARBOR_MIRROR_PASSWORD")}",
+            f"docker://{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
+        ]
+        logger.info(command)
+        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+        if result.returncode == 0:
+            # image exists we can use this directly
+            return f"{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
+
+        # otherwise we proceed with using a proxy cache repository instead
+
+    if harbor_repo:
+        patched_image = f"{patch_registry}/{harbor_repo}-cache/{stripped_image}"
     else:
-        patched_image = image
+        patched_image = image # if no harbor cache was found for the registry we use the original
 
     logger.info("orig image: " + image)
     logger.info("patched image: " + patched_image)

@@ -4,6 +4,7 @@ import subprocess
 import time
 from pprint import pformat
 
+from cachetools import TTLCache
 from kubernetes import client, config, watch
 from pve_cloud.orm.alchemy import AcmeX509
 from sqlalchemy import create_engine, select
@@ -24,6 +25,8 @@ def watch_pods():
     resource_version = initial_list.metadata.resource_version
 
     w = watch.Watch()
+
+    processed_pods = TTLCache(maxsize=1024, ttl=36000)
 
     for event in w.stream(
         v1.list_pod_for_all_namespaces,
@@ -50,11 +53,17 @@ def watch_pods():
         )
         if pod.status.phase == "Running" and container_ready and init_container_ready:
 
+            # only trigger skopeo once
+            if pod.metadata.uid in processed_pods:
+                continue
+            
+            # collect all images of the pod
             images = [c.image for c in pod.spec.containers]
 
             if pod.spec.init_containers:
                 images.extend(c.image for c in pod.spec.init_containers)
 
+            # process images and retag push them to the full cloud-mirror harbor repository
             for image in images:
                 if image.startswith(harbor_host):
                     image_splits = image.removeprefix(f"{harbor_host}/").split("/")
@@ -82,14 +91,8 @@ def watch_pods():
 
                         subprocess.run(command, text=True, check=True)
 
-                    # image from cache / mirror
-
-            # if image starts with cache host
-
-            # if repository name ends with -cache, retag the image to the cloud-mirror repository
-
-            # push it to /cloud-mirror/ + repository trimmed -cache / image path
-            logger.info(pformat(images))
+            # store that we processed the pod
+            processed_pods[pod.metadata.uid] = True
 
 
 def main():
