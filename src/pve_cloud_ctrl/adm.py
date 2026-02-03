@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import subprocess
 from pprint import pformat
 
 from flask import Flask, jsonify, request
@@ -9,7 +10,6 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 import pve_cloud_ctrl.funcs as funcs
-import subprocess
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-adm")
@@ -25,16 +25,16 @@ net_v1 = client.NetworkingV1Api()
 # from the harbor-mirror-projects terraform module
 def get_harbor_repo(registry, image):
     if registry == "quay.io":
-        return "quay", image.removeprefix('quay.io/')
+        return "quay", image.removeprefix("quay.io/")
     elif registry == "public.ecr.aws":
-        return "aws-ecr", image.removeprefix('public.ecr.aws/')
+        return "aws-ecr", image.removeprefix("public.ecr.aws/")
     elif registry == "ghcr.io":
-        return "github", image.removeprefix('ghcr.io/')
-    elif (registry == "docker.io" or "." not in registry):
-        return "docker-hub", image.removeprefix('docker.io/')
+        return "github", image.removeprefix("ghcr.io/")
+    elif registry == "docker.io" or "." not in registry:
+        return "docker-hub", image.removeprefix("docker.io/")
     else:
         return None, None
-    
+
 
 def get_patched_image(image):
     patch_registry = os.getenv("HARBOR_MIRROR_HOST")
@@ -51,13 +51,17 @@ def get_patched_image(image):
     if harbor_repo:
         # use skopeo to check if the image already exists as a full mirror
         command = [
-            "skopeo", "inspect", "--creds", 
+            "skopeo",
+            "inspect",
+            "--creds",
             f"{os.getenv("HARBOR_MIRROR_USER")}:{os.getenv("HARBOR_MIRROR_PASSWORD")}",
-            f"docker://{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
+            f"docker://{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}",
         ]
         logger.info(command)
-        result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
+        result = subprocess.run(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
         if result.returncode == 0:
             # image exists we can use this directly
             return f"{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
@@ -67,7 +71,9 @@ def get_patched_image(image):
     if harbor_repo:
         patched_image = f"{patch_registry}/{harbor_repo}-cache/{stripped_image}"
     else:
-        patched_image = image # if no harbor cache was found for the registry we use the original
+        patched_image = (
+            image  # if no harbor cache was found for the registry we use the original
+        )
 
     logger.info("orig image: " + image)
     logger.info("patched image: " + patched_image)

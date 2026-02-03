@@ -56,7 +56,7 @@ def watch_pods():
             # only trigger skopeo once
             if pod.metadata.uid in processed_pods:
                 continue
-            
+
             # collect all images of the pod
             images = [c.image for c in pod.spec.containers]
 
