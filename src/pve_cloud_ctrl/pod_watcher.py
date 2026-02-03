@@ -12,6 +12,7 @@ logger = logging.getLogger("cloud-watcher")
 
 harbor_host = os.getenv("HARBOR_MIRROR_HOST")
 
+
 # todo: for completeness sake this should also be done by the cron job
 def watch_pods():
     config.load_incluster_config()

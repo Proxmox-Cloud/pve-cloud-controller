@@ -31,31 +31,43 @@ def mutate_sa():
     uid = admission_review["request"]["uid"]
 
     namespace = admission_review["request"]["namespace"]
-    serviceaccount = admission_review['request']['object']
+    serviceaccount = admission_review["request"]["object"]
 
     # first we check if the cluster-pull-secret is present in the namespace
     # with the fitting "pve-cloud-pull-secret": "sa-inject" annotation
     try:
-        secret = v1.read_namespaced_secret(name="cluster-pull-secret", namespace=namespace)
-        
-        if secret.metadata.annotations and "pve-cloud-pull-secret" in secret.metadata.annotations and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject":
-            logger.info(f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {serviceaccount.metadata.name}")
+        secret = v1.read_namespaced_secret(
+            name="cluster-pull-secret", namespace=namespace
+        )
+
+        if (
+            secret.metadata.annotations
+            and "pve-cloud-pull-secret" in secret.metadata.annotations
+            and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
+        ):
+            logger.info(
+                f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {serviceaccount.metadata.name}"
+            )
 
             patches = []
 
             if "imagePullSecrets" in serviceaccount:
-                patches.append(                        {
-                                    "op": "add",
-                                    "path": "/imagePullSecrets/-",
-                                    "value": {"name": "cluster-pull-secret"},
-                    })
+                patches.append(
+                    {
+                        "op": "add",
+                        "path": "/imagePullSecrets/-",
+                        "value": {"name": "cluster-pull-secret"},
+                    }
+                )
             else:
-                patches.append(                        {
-                                    "op": "add",
-                                    "path": "/imagePullSecrets",
-                                    "value": [{"name": "cluster-pull-secret"}],
-                    })    
-                
+                patches.append(
+                    {
+                        "op": "add",
+                        "path": "/imagePullSecrets",
+                        "value": [{"name": "cluster-pull-secret"}],
+                    }
+                )
+
             response = {
                 "apiVersion": "admission.k8s.io/v1",
                 "kind": "AdmissionReview",
@@ -70,10 +82,10 @@ def mutate_sa():
             }
 
             return jsonify(response)
-        
+
     except ApiException as e:
         if e.status != 404:
-            raise # other than 404 return is undefined behaviour => crash the controller
+            raise  # other than 404 return is undefined behaviour => crash the controller
 
     # fallback is simply allowing and not patching anything
     response = {
@@ -86,9 +98,6 @@ def mutate_sa():
     }
 
     return jsonify(response)
-
-
-
 
 
 # translates registry entry of image into harbor equivalent
