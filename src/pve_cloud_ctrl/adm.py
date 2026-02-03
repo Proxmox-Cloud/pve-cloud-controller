@@ -33,6 +33,8 @@ def mutate_sa():
     namespace = admission_review["request"]["namespace"]
     serviceaccount = admission_review["request"]["object"]
 
+    sa_name = serviceaccount["metadata"]["name"]
+
     # first we check if the cluster-pull-secret is present in the namespace
     # with the fitting "pve-cloud-pull-secret": "sa-inject" annotation
     try:
@@ -46,7 +48,7 @@ def mutate_sa():
             and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
         ):
             logger.info(
-                f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {serviceaccount.metadata.name}"
+                f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {sa_name}"
             )
 
             patches = []
