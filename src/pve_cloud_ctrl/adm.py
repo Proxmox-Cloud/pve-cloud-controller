@@ -88,7 +88,7 @@ def mutate_pod():
 
     uid = admission_review["request"]["uid"]
     pod_spec = admission_review["request"]["object"]
-    pod_name = pod_spec["metadata"]["name"]
+    pod_genname = pod_spec["metadata"]["generateName"]
     namespace = admission_review["request"]["namespace"]
 
     # logic inserts patches here
@@ -178,7 +178,7 @@ def mutate_pod():
             and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
         ):
             logger.info(
-                f"cluster-pull-secret with correct annotation exists {namespace} - injecting into pod {pod_name}"
+                f"cluster-pull-secret with correct annotation exists {namespace} - injecting into pod {pod_genname}"
             )
             insert_cluster_pull_secret = True
 
