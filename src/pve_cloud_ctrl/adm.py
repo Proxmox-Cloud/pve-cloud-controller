@@ -21,87 +21,6 @@ v1 = client.CoreV1Api()
 net_v1 = client.NetworkingV1Api()
 
 
-# we add cluster-pull-secret to every service account that is created and called
-# by the hook (definition filters namespaces)
-@app.route("/mutate-sa", methods=["POST"])
-def mutate_sa():
-
-    admission_review = request.get_json()
-
-    uid = admission_review["request"]["uid"]
-
-    namespace = admission_review["request"]["namespace"]
-    serviceaccount = admission_review["request"]["object"]
-
-    sa_name = serviceaccount["metadata"]["name"]
-
-    # first we check if the cluster-pull-secret is present in the namespace
-    # with the fitting "pve-cloud-pull-secret": "sa-inject" annotation
-    try:
-        secret = v1.read_namespaced_secret(
-            name="cluster-pull-secret", namespace=namespace
-        )
-
-        if (
-            secret.metadata.annotations
-            and "pve-cloud-pull-secret" in secret.metadata.annotations
-            and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
-        ):
-            logger.info(
-                f"cluster-pull-secret with correct annoation exists {namespace} - injecting into sa {sa_name}"
-            )
-
-            patches = []
-
-            if "imagePullSecrets" in serviceaccount:
-                patches.append(
-                    {
-                        "op": "add",
-                        "path": "/imagePullSecrets/-",
-                        "value": {"name": "cluster-pull-secret"},
-                    }
-                )
-            else:
-                patches.append(
-                    {
-                        "op": "add",
-                        "path": "/imagePullSecrets",
-                        "value": [{"name": "cluster-pull-secret"}],
-                    }
-                )
-
-            response = {
-                "apiVersion": "admission.k8s.io/v1",
-                "kind": "AdmissionReview",
-                "response": {
-                    "uid": uid,
-                    "allowed": True,
-                    "patchType": "JSONPatch",
-                    "patch": base64.b64encode(
-                        json.dumps(patches).encode("utf-8")
-                    ).decode("utf-8"),
-                },
-            }
-
-            return jsonify(response)
-
-    except ApiException as e:
-        if e.status != 404:
-            raise  # other than 404 return is undefined behaviour => crash the controller
-
-    # fallback is simply allowing and not patching anything
-    response = {
-        "apiVersion": "admission.k8s.io/v1",
-        "kind": "AdmissionReview",
-        "response": {
-            "uid": uid,
-            "allowed": True,  # Allow the request without modifications
-        },
-    }
-
-    return jsonify(response)
-
-
 # translates registry entry of image into harbor equivalent
 # from the harbor-mirror-projects terraform module
 def get_harbor_repo(registry, image):
@@ -165,26 +84,27 @@ def get_patched_image(image):
 @app.route("/mutate-pod", methods=["POST"])
 def mutate_pod():
     admission_review = request.get_json()
+    logger.debug(pformat(admission_review))
 
     uid = admission_review["request"]["uid"]
     pod_spec = admission_review["request"]["object"]
+    pod_name = pod_spec["metadata"]["name"]
     namespace = admission_review["request"]["namespace"]
 
-    # need this to exclude the harbor namespace / system namespaces
+    # logic inserts patches here
+    patches = []
+
+    # check if mirroring is enabled and applies to this pod
     exclude_namespace = False
     if os.getenv("EXCLUDE_MIRROR_NAMESPACES"):
         if namespace in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(","):
             logger.debug("exluding namespace")
             exclude_namespace = True
 
-    logger.debug(pformat(admission_review))
+    insert_mirror_pull_secret = os.getenv("HARBOR_MIRROR_HOST") and os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME") and not exclude_namespace
 
-    # pods only get patched to the mirror repository if its actually defined
-    if (
-        os.getenv("HARBOR_MIRROR_HOST")
-        and os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")
-        and not exclude_namespace
-    ):
+    if insert_mirror_pull_secret:
+        # we create the mirror pull secret dynamically
         try:
             # check if the secret exists
             mirror_pull_secret = v1.read_namespaced_secret(
@@ -208,10 +128,9 @@ def mutate_pod():
                 v1.create_namespaced_secret(namespace=namespace, body=secret)
                 logger.info("created mps")
 
-        # patch the pods images to point to our harbor mirror
-        patches = []
 
-        patched_image = False
+        # mirroring involves rewriting image repositories for all pods
+        # to our harbor cache repositories / full mirror
 
         if "initContainers" in pod_spec["spec"]:
             # preprend harbor.vmz.management/mirror repo
@@ -227,7 +146,7 @@ def mutate_pod():
                             "value": image_patched,
                         }
                     )
-                    patched_image = True
+
 
         # normal containers
         for i, container in enumerate(pod_spec["spec"]["containers"]):
@@ -242,44 +161,86 @@ def mutate_pod():
                         "value": image_patched,
                     }
                 )
-                patched_image = True
 
-        # add / create image pull secrets
-        if patched_image:
-            if "imagePullSecrets" in pod_spec["spec"]:
+
+    # also check if the general cluster-pull-secret with injection annotation is defined 
+    # this then also needs to be inserted into the pods pull secrets
+    insert_cluster_pull_secret = False
+    try:
+        secret = v1.read_namespaced_secret(
+            name="cluster-pull-secret", namespace=namespace
+        )
+
+        if (
+            secret.metadata.annotations
+            and "pve-cloud-pull-secret" in secret.metadata.annotations
+            and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
+        ):
+            logger.info(
+                f"cluster-pull-secret with correct annotation exists {namespace} - injecting into pod {pod_name}"
+            )
+            insert_cluster_pull_secret = True
+
+    except ApiException as e:
+        if e.status != 404:
+            raise  # other than 404 return is undefined behaviour => crash the controller
+
+
+    # add / create image pull secrets
+    if "imagePullSecrets" in pod_spec["spec"]:
+        # the pod already has a list of pull secrets, we simply append ours to it
+
+        if insert_mirror_pull_secret:
+            patches.append(
+                {
+                    "op": "add",
+                    "path": "/spec/imagePullSecrets/-",
+                    "value": {"name": os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")},
+                }
+            )
+
+        if insert_cluster_pull_secret:
                 patches.append(
                     {
                         "op": "add",
                         "path": "/spec/imagePullSecrets/-",
-                        "value": {"name": os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")},
+                        "value": {"name": "cluster-pull-secret"},
                     }
                 )
-            else:
-                patches.append(
-                    {
-                        "op": "add",
-                        "path": "/spec/imagePullSecrets",
-                        "value": [
-                            {"name": os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")}
-                        ],
-                    }
-                )
+    else:
+        # the pod doesnt have a list, meaning we need to submit a patch with a list of our secrets
+        pull_secrets = []
 
-        if patches:
-            response = {
-                "apiVersion": "admission.k8s.io/v1",
-                "kind": "AdmissionReview",
-                "response": {
-                    "uid": uid,
-                    "allowed": True,
-                    "patchType": "JSONPatch",
-                    "patch": base64.b64encode(
-                        json.dumps(patches).encode("utf-8")
-                    ).decode("utf-8"),
-                },
-            }
+        if insert_mirror_pull_secret:
+            pull_secrets.append({"name": os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")})
+        
+        if insert_cluster_pull_secret:
+            pull_secrets.append({"name": "cluster-pull-secret"})
 
-            return jsonify(response)
+        if pull_secrets:
+            patches.append(
+                {
+                    "op": "add",
+                    "path": "/spec/imagePullSecrets",
+                    "value": pull_secrets,
+                }
+            )
+
+    if patches:
+        response = {
+            "apiVersion": "admission.k8s.io/v1",
+            "kind": "AdmissionReview",
+            "response": {
+                "uid": uid,
+                "allowed": True,
+                "patchType": "JSONPatch",
+                "patch": base64.b64encode(
+                    json.dumps(patches).encode("utf-8")
+                ).decode("utf-8"),
+            },
+        }
+
+        return jsonify(response)
 
     # fallback
     response = {
