@@ -1,7 +1,7 @@
 # pessimistic operator for local tdd installs (pip install -e .)
 py-pve-cloud>=0.15.6,<0.16.0
 flask==3.1.2
-kubernetes==34.1.0
+kubernetes==35.0.0
 boto3==1.42.26
 gunicorn==23.0.0
 cachetools==7.0.0
