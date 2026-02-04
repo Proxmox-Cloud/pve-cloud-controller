@@ -88,7 +88,11 @@ def mutate_pod():
 
     uid = admission_review["request"]["uid"]
     pod_spec = admission_review["request"]["object"]
-    pod_name = pod_spec["metadata"]["name"] if "name" in pod_spec["metadata"] else pod_spec["metadata"]["generateName"]
+    pod_name = (
+        pod_spec["metadata"]["name"]
+        if "name" in pod_spec["metadata"]
+        else pod_spec["metadata"]["generateName"]
+    )
     namespace = admission_review["request"]["namespace"]
 
     # logic inserts patches here
