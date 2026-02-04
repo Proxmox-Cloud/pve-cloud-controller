@@ -101,7 +101,11 @@ def mutate_pod():
             logger.debug("exluding namespace")
             exclude_namespace = True
 
-    insert_mirror_pull_secret = os.getenv("HARBOR_MIRROR_HOST") and os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME") and not exclude_namespace
+    insert_mirror_pull_secret = (
+        os.getenv("HARBOR_MIRROR_HOST")
+        and os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")
+        and not exclude_namespace
+    )
 
     if insert_mirror_pull_secret:
         # we create the mirror pull secret dynamically
@@ -128,7 +132,6 @@ def mutate_pod():
                 v1.create_namespaced_secret(namespace=namespace, body=secret)
                 logger.info("created mps")
 
-
         # mirroring involves rewriting image repositories for all pods
         # to our harbor cache repositories / full mirror
 
@@ -147,7 +150,6 @@ def mutate_pod():
                         }
                     )
 
-
         # normal containers
         for i, container in enumerate(pod_spec["spec"]["containers"]):
             image = container["image"]
@@ -162,8 +164,7 @@ def mutate_pod():
                     }
                 )
 
-
-    # also check if the general cluster-pull-secret with injection annotation is defined 
+    # also check if the general cluster-pull-secret with injection annotation is defined
     # this then also needs to be inserted into the pods pull secrets
     insert_cluster_pull_secret = False
     try:
@@ -185,7 +186,6 @@ def mutate_pod():
         if e.status != 404:
             raise  # other than 404 return is undefined behaviour => crash the controller
 
-
     # add / create image pull secrets
     if "imagePullSecrets" in pod_spec["spec"]:
         # the pod already has a list of pull secrets, we simply append ours to it
@@ -200,20 +200,20 @@ def mutate_pod():
             )
 
         if insert_cluster_pull_secret:
-                patches.append(
-                    {
-                        "op": "add",
-                        "path": "/spec/imagePullSecrets/-",
-                        "value": {"name": "cluster-pull-secret"},
-                    }
-                )
+            patches.append(
+                {
+                    "op": "add",
+                    "path": "/spec/imagePullSecrets/-",
+                    "value": {"name": "cluster-pull-secret"},
+                }
+            )
     else:
         # the pod doesnt have a list, meaning we need to submit a patch with a list of our secrets
         pull_secrets = []
 
         if insert_mirror_pull_secret:
             pull_secrets.append({"name": os.getenv("HARBOR_MIRROR_PULL_SECRET_NAME")})
-        
+
         if insert_cluster_pull_secret:
             pull_secrets.append({"name": "cluster-pull-secret"})
 
@@ -234,9 +234,9 @@ def mutate_pod():
                 "uid": uid,
                 "allowed": True,
                 "patchType": "JSONPatch",
-                "patch": base64.b64encode(
-                    json.dumps(patches).encode("utf-8")
-                ).decode("utf-8"),
+                "patch": base64.b64encode(json.dumps(patches).encode("utf-8")).decode(
+                    "utf-8"
+                ),
             },
         }
 
