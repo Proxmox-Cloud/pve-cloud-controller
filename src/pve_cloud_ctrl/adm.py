@@ -179,7 +179,7 @@ def mutate_pod():
         if (
             secret.metadata.annotations
             and "pve-cloud-pull-secret" in secret.metadata.annotations
-            and secret.metadata.annotations["pve-cloud-pull-secret"] == "sa-inject"
+            and secret.metadata.annotations["pve-cloud-pull-secret"] == "pod-inject"
         ):
             logger.info(
                 f"cluster-pull-secret with correct annotation exists {namespace} - injecting into pod {pod_name}"
