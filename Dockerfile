@@ -21,6 +21,8 @@ RUN if [ -n "$LOCAL_PYPI_IP" ]; then \
 COPY pyproject.toml ./
 COPY src/ ./src/
 
+COPY gunicorn.conf.py ./
+
 RUN pip install --no-deps .
 
 ENV PYTHONUNBUFFERED=1

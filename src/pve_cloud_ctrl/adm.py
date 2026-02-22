@@ -10,6 +10,7 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 import pve_cloud_ctrl.funcs as funcs
+import time
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-adm")
@@ -20,6 +21,8 @@ config.load_incluster_config()
 v1 = client.CoreV1Api()
 net_v1 = client.NetworkingV1Api()
 
+mirror_cache_lock = None
+mirror_cache_dict = None
 
 # translates registry entry of image into harbor equivalent
 # from the harbor-mirror-projects terraform module
@@ -48,6 +51,10 @@ def get_patched_image(image):
 
     harbor_repo, stripped_image = get_harbor_repo(registry, image)
 
+    # check if inspect call cache already returned the image
+    if f"{harbor_repo}/{stripped_image}" in mirror_cache_dict:
+        return f"{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
+
     if harbor_repo:
         # use skopeo to check if the image already exists as a full mirror
         command = [
@@ -58,12 +65,21 @@ def get_patched_image(image):
             f"docker://{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}",
         ]
         logger.info(command)
+        start_time = time.perf_counter()
         result = subprocess.run(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
+        end_time = time.perf_counter()
+        duration = end_time - start_time
+        logger.info(f"Skopeo command finished in {duration:.2f}")
 
         if result.returncode == 0:
             # image exists we can use this directly
+            
+            with mirror_cache_lock:
+                # write it to the shared cache for other workers to save time
+                mirror_cache_dict[f"{harbor_repo}/{stripped_image}"] = True
+
             return f"{patch_registry}/cloud-mirror/{harbor_repo}/{stripped_image}"
 
         # otherwise we proceed with using a proxy cache repository instead
