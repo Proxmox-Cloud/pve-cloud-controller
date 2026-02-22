@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from pprint import pformat
 
 from flask import Flask, jsonify, request
@@ -10,7 +11,6 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 import pve_cloud_ctrl.funcs as funcs
-import time
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("cloud-adm")
@@ -23,6 +23,7 @@ net_v1 = client.NetworkingV1Api()
 
 mirror_cache_lock = None
 mirror_cache_dict = None
+
 
 # translates registry entry of image into harbor equivalent
 # from the harbor-mirror-projects terraform module
@@ -75,7 +76,7 @@ def get_patched_image(image):
 
         if result.returncode == 0:
             # image exists we can use this directly
-            
+
             with mirror_cache_lock:
                 # write it to the shared cache for other workers to save time
                 mirror_cache_dict[f"{harbor_repo}/{stripped_image}"] = True
