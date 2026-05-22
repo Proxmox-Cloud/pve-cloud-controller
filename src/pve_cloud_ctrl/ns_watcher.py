@@ -23,7 +23,7 @@ def watch_namespaces():
     w = watch.Watch()
 
     for event in w.stream(
-        v1.list_namespace, resource_version=resource_version, timeout_seconds=60
+        v1.list_namespace, resource_version=resource_version, timeout_seconds=60, _request_timeout=70
     ):
         # here we only want to exclude the defualt namespaces, even if we dont want to apply mirroring
         # we still want to apply tls
