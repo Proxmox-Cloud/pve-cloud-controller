@@ -2,6 +2,8 @@ import fnmatch
 import json
 import logging
 import os
+import threading
+import requests
 
 import boto3
 import dns.query
@@ -106,6 +108,24 @@ def get_ext_domains():
     logger.debug(f"num hosted zones found {len(hosted_zones)}")
 
     return [(zone["Name"], zone["Id"]) for zone in hosted_zones]
+
+
+
+def send_mc_dns_update(host, operation):
+    for mc_endpoint in os.getenv("MC_PEER_ENDPOINTS").split(","):
+        try:
+            response = requests.post(f"{mc_endpoint}/ingress-ddns-update", json={
+                "host": host,
+                "operation": operation,
+                "address": os.getenv("EXTERNAL_FORWARDED_IP")
+            }, headers={
+                "Authorization": f"Bearer {os.getenv('MC_TOKEN')}"
+            }, timeout=5)
+
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(f"Error connecting mc peer {mc_endpoint}")
+            logger.error(e)
 
 
 def set_ingress_ext_dyn_dns(ext_domains, host):
@@ -216,7 +236,7 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
         return [f"Error ext dns delete {e.response['Error']}"]
 
 
-def set_ingress_dyn_dns(bind_domains, host):
+def set_ingress_dyn_dns(bind_domains, host, address=None):
     cluster_cert_covered = validate_host_allowed(host)
     if not cluster_cert_covered:
         return [f"Host {host} is not covered by the clusters certificate!"]
@@ -245,12 +265,22 @@ def set_ingress_dyn_dns(bind_domains, host):
         "@" if host == matching_domain else host.removesuffix("." + matching_domain),
         300,
         "A",
-        os.getenv("INTERNAL_PROXY_FIP"),
+        address if address else os.getenv("INTERNAL_PROXY_FIP"),
     )
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
 
     logger.info(response)
     logger.info(dns.rcode.to_text(response.rcode()))
+
+    # if multi cloud endpoints are defined, send the updates to their hooks aswell
+    # done for now in a seperate thread
+    # todo: this should be handled by a retry mechanism / job queue system incase the other cloud is down
+    # this can lead to inconsistencies in DNS!
+    if os.getenv("MC_PEER_ENDPOINTS") and os.getenv("MC_TOKEN"):
+        threading.Thread(
+            target=send_mc_dns_update,
+            args=(host,"ADD",)
+        ).start()
 
     if response.rcode() != dns.rcode.NOERROR:
         return [f"Error internal dns update {dns.rcode.to_text(response.rcode())}"]
@@ -289,6 +319,12 @@ def delete_ingress_dyn_dns(bind_domains, host):
     response = dns.query.tcp(dns_update, os.getenv("BIND_MASTER_IP"))
     logger.info(response)
     logger.info(dns.rcode.to_text(response.rcode()))
+
+    if os.getenv("MC_PEER_ENDPOINTS") and os.getenv("MC_TOKEN"):
+        threading.Thread(
+            target=send_mc_dns_update,
+            args=(host,"DELETE",)
+        ).start()
 
     # should always return noerror calling delete on existing zone, even when record doesnt exist
     if response.rcode() != dns.rcode.NOERROR:

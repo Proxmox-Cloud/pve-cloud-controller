@@ -18,4 +18,4 @@ ns-watcher = "pve_cloud_ctrl.ns_watcher:main"
 pod-watcher = "pve_cloud_ctrl.pod_watcher:main"
 adm = "pve_cloud_ctrl.adm:main"
 cron = "pve_cloud_ctrl.cron:main"
-
+mc-gw = "pve_cloud_ctrl.mc_gateway:main"
