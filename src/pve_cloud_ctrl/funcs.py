@@ -3,13 +3,13 @@ import json
 import logging
 import os
 import threading
-import requests
 
 import boto3
 import dns.query
 import dns.rcode
 import dns.tsigkeyring
 import dns.update
+import requests
 from botocore.exceptions import ClientError
 from pve_cloud.orm.alchemy import BindDomains
 from sqlalchemy import create_engine, select
@@ -110,17 +110,19 @@ def get_ext_domains():
     return [(zone["Name"], zone["Id"]) for zone in hosted_zones]
 
 
-
 def send_mc_dns_update(host, operation):
     for mc_endpoint in os.getenv("MC_PEER_ENDPOINTS").split(","):
         try:
-            response = requests.post(f"{mc_endpoint}/ingress-ddns-update", json={
-                "host": host,
-                "operation": operation,
-                "address": os.getenv("EXTERNAL_FORWARDED_IP")
-            }, headers={
-                "Authorization": f"Bearer {os.getenv('MC_TOKEN')}"
-            }, timeout=5)
+            response = requests.post(
+                f"{mc_endpoint}/ingress-ddns-update",
+                json={
+                    "host": host,
+                    "operation": operation,
+                    "address": os.getenv("EXTERNAL_FORWARDED_IP"),
+                },
+                headers={"Authorization": f"Bearer {os.getenv('MC_TOKEN')}"},
+                timeout=5,
+            )
 
             response.raise_for_status()
         except Exception as e:
@@ -279,7 +281,10 @@ def set_ingress_dyn_dns(bind_domains, host, address=None):
     if os.getenv("MC_PEER_ENDPOINTS") and os.getenv("MC_TOKEN"):
         threading.Thread(
             target=send_mc_dns_update,
-            args=(host,"ADD",)
+            args=(
+                host,
+                "ADD",
+            ),
         ).start()
 
     if response.rcode() != dns.rcode.NOERROR:
@@ -323,7 +328,10 @@ def delete_ingress_dyn_dns(bind_domains, host):
     if os.getenv("MC_PEER_ENDPOINTS") and os.getenv("MC_TOKEN"):
         threading.Thread(
             target=send_mc_dns_update,
-            args=(host,"DELETE",)
+            args=(
+                host,
+                "DELETE",
+            ),
         ).start()
 
     # should always return noerror calling delete on existing zone, even when record doesnt exist
