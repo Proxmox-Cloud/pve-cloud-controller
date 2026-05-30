@@ -126,6 +126,58 @@ def post_acme_x509_update():
     return "Updated", 200
 
 
+# endpoints for alertmanager discovery
+@app.route("/get-client-alertmanagers", methods=["GET"])
+def get_client_alertmanagers():
+    auth = request.headers.get("Authorization")
+    if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
+        return "Unauthorized", 401
+    
+    alertmanagers = []
+
+    engine = create_engine(os.getenv("PG_CONN_STR"))
+    with Session(engine) as session:
+        stmt = select(ProxmoxCloudSecrets).where(
+            ProxmoxCloudSecrets.cloud_domain == os.getenv("PVE_CLOUD_DOMAIN"),
+            ProxmoxCloudSecrets.secret_type == "mon-alertmgr-client",
+        )
+        ca_secrets = session.scalars(stmt).all()
+        for secret in ca_secrets:
+            alertmanagers.append(
+                {
+                    "secret_name": secret.secret_name,
+                    "secret_data": secret.secret_data,
+                    "cloud_domain": secret.cloud_domain
+                }
+            )
+
+    return jsonify(alertmanagers)
+
+
+@app.route("/get-gotify-master", methods=["GET"])
+def get_gotify_master():
+    auth = request.headers.get("Authorization")
+    if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
+        return "Unauthorized", 401
+    
+    engine = create_engine(os.getenv("PG_CONN_STR"))
+    with Session(engine) as session:
+        stmt = select(ProxmoxCloudSecrets).where(
+            ProxmoxCloudSecrets.cloud_domain == os.getenv("PVE_CLOUD_DOMAIN"),
+            ProxmoxCloudSecrets.secret_name == "gotify_admin_pw",
+        )
+        gotify_master = session.scalars(stmt).first()
+        if gotify_master:
+            return jsonify({
+                "gotify_present": True,
+                "gotify_access": gotify_master.secret_data
+            })
+
+    return jsonify({
+        "gotify_present": False
+    })
+
+
 def main():
     # todo: change to gunicorn / multi threaded
     app.run(host="0.0.0.0", port=80)
