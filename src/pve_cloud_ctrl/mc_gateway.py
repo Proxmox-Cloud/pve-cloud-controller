@@ -1,12 +1,12 @@
 import logging
 import os
-from pprint import pformat
-import pve_cloud_ctrl.funcs as funcs
+
+from flask import Flask, jsonify, request
 from pve_cloud.orm.alchemy import AcmeX509, ProxmoxCloudSecrets
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 
-from flask import Flask, jsonify, request
+import pve_cloud_ctrl.funcs as funcs
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("multi-cloud")
@@ -44,20 +44,22 @@ def get_acme_configs():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     all_certs = []
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
         stmt = select(AcmeX509)
         certs = session.scalars(stmt).all()
         for cert in certs:
-            all_certs.append({
-                "stack_fqdn": cert.stack_fqdn,
-                "config": cert.config,
-                "ec_csr": cert.ec_csr,
-                "ec_crt": cert.ec_crt
-            })
-    
+            all_certs.append(
+                {
+                    "stack_fqdn": cert.stack_fqdn,
+                    "config": cert.config,
+                    "ec_csr": cert.ec_csr,
+                    "ec_crt": cert.ec_crt,
+                }
+            )
+
     # return certs for awx
     return jsonify(all_certs)
 
@@ -67,7 +69,7 @@ def get_acme_account():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
         stmt = select(ProxmoxCloudSecrets).where(
@@ -80,7 +82,7 @@ def get_acme_account():
 
         if "acme_contact" not in cv_record.secret_data:
             return "acme_contact not in cluster vars!", 400
-            
+
         acme_contact = cv_record.secret_data["acme_contact"]
 
         # uncomment for mock e2e
@@ -94,32 +96,28 @@ def get_acme_account():
         cs_record = session.scalars(stmt).first()
         if not cs_record:
             return "cluster-secrets secret not found!", 400
-        
+
         if "acme-account.key" not in cs_record.secret_data:
             return "acme-account.key not in cluster secrets!", 400
 
         acme_account_key = cs_record.secret_data["acme-account.key"]
 
-    return jsonify({
-        "acme_contact": acme_contact,
-        "acme-account.key": acme_account_key
-    })
-    
+    return jsonify({"acme_contact": acme_contact, "acme-account.key": acme_account_key})
+
 
 @app.route("/post-acme-x509-update", methods=["POST"])
 def post_acme_x509_update():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     acme_update = request.get_json()
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
-        stmt = update(AcmeX509).where(
-            AcmeX509.stack_fqdn == acme_update["stack_fqdn"]
-        ).values(
-            ec_crt=acme_update["ec_crt"],
-            k8s=acme_update["k8s"]
+        stmt = (
+            update(AcmeX509)
+            .where(AcmeX509.stack_fqdn == acme_update["stack_fqdn"])
+            .values(ec_crt=acme_update["ec_crt"], k8s=acme_update["k8s"])
         )
 
         session.execute(stmt)
