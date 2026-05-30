@@ -132,7 +132,7 @@ def get_client_alertmanagers():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     alertmanagers = []
 
     engine = create_engine(os.getenv("PG_CONN_STR"))
@@ -147,7 +147,7 @@ def get_client_alertmanagers():
                 {
                     "secret_name": secret.secret_name,
                     "secret_data": secret.secret_data,
-                    "cloud_domain": secret.cloud_domain
+                    "cloud_domain": secret.cloud_domain,
                 }
             )
 
@@ -159,7 +159,7 @@ def get_gotify_master():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
         stmt = select(ProxmoxCloudSecrets).where(
@@ -168,14 +168,11 @@ def get_gotify_master():
         )
         gotify_master = session.scalars(stmt).first()
         if gotify_master:
-            return jsonify({
-                "gotify_present": True,
-                "gotify_access": gotify_master.secret_data
-            })
+            return jsonify(
+                {"gotify_present": True, "gotify_access": gotify_master.secret_data}
+            )
 
-    return jsonify({
-        "gotify_present": False
-    })
+    return jsonify({"gotify_present": False})
 
 
 def main():
