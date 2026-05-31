@@ -237,11 +237,12 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
 
         return [f"Error ext dns delete {e.response['Error']}"]
 
-
-def set_ingress_dyn_dns(bind_domains, host, address=None):
-    cluster_cert_covered = validate_host_allowed(host)
-    if not cluster_cert_covered:
-        return [f"Host {host} is not covered by the clusters certificate!"]
+# if the address isnt specified we use the clusters internal haproxy floating ip
+def set_ingress_dyn_dns(bind_domains, host, address=None, skip_cluster_cert_check=False):
+    if not skip_cluster_cert_check:
+        cluster_cert_covered = validate_host_allowed(host)
+        if not cluster_cert_covered:
+            return [f"Host {host} is not covered by the clusters certificate!"]
 
     matching_domain = None
     for bind_domain in bind_domains:

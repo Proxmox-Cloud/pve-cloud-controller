@@ -27,8 +27,10 @@ def post_ingress_ddns_update():
     bind_domains = funcs.get_bind_domains()
 
     if ingress_update["operation"] == "ADD":
+        # we pass the public ip of the peer aswell as ignore any cluster cert checks
+        # and only validate against the domains of the cloud
         funcs.set_ingress_dyn_dns(
-            bind_domains, ingress_update["host"], ingress_update["address"]
+            bind_domains, ingress_update["host"], address=ingress_update["address"], skip_cluster_cert_check=True
         )
     elif ingress_update["operation"] == "DELETE":
         funcs.delete_ingress_dyn_dns(bind_domains, ingress_update["host"])
