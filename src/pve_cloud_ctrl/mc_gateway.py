@@ -218,9 +218,9 @@ def get_victoria_clients():
         for client in vlog_clients:
             victoria_clients.append(
                 {
-                    "secret_name": secret.secret_name,
-                    "secret_data": secret.secret_data,
-                    "cloud_domain": secret.cloud_domain,
+                    "secret_name": client.secret_name,
+                    "secret_data": client.secret_data,
+                    "cloud_domain": client.cloud_domain,
                 }
             )
 
