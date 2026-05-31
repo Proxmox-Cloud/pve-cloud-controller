@@ -239,9 +239,8 @@ def delete_ingress_ext_dyn_dns(ext_domains, host):
 
 
 # if the address isnt specified we use the clusters internal haproxy floating ip
-def set_ingress_dyn_dns(
-    bind_domains, host, address=None, skip_cluster_cert_check=False
-):
+def set_ingress_dyn_dns(bind_domains, host, address=None, skip_cluster_cert_check=False):
+    logger.debug(f"set dyn dns, address {address}, skip_cluster_cert_check {skip_cluster_cert_check}")
     if not skip_cluster_cert_check:
         cluster_cert_covered = validate_host_allowed(host)
         if not cluster_cert_covered:
@@ -257,6 +256,7 @@ def set_ingress_dyn_dns(
         logger.info(f"No authoratative domain found for host {host}")
         return []
 
+    logger.debug(f"performing dns update {matching_domain}")
     dns_update = dns.update.Update(
         matching_domain,
         keyring=dns.tsigkeyring.from_text(
