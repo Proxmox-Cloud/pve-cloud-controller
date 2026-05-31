@@ -294,6 +294,10 @@ def set_ingress_dyn_dns(bind_domains, host, address=None):
 
 
 def delete_ingress_dyn_dns(bind_domains, host):
+    # on delete we dont check if the cert config contains the host
+    # the config might have changed while ingresses where still valid
+    # we assume they are rightly created and just try to delete
+
     # check domain exists in bind first
     matching_domain = None
     for bind_domain in bind_domains:
