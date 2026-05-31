@@ -153,6 +153,7 @@ def get_client_alertmanagers():
 
     return jsonify(alertmanagers)
 
+
 # gotify application registration
 @app.route("/get-gotify-master", methods=["GET"])
 def get_gotify_master():
@@ -181,23 +182,21 @@ def get_gotify_master():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     engine = create_engine(os.getenv("PG_CONN_STR"))
     with Session(engine) as session:
         stmt = select(ProxmoxCloudSecrets).where(
             ProxmoxCloudSecrets.cloud_domain == os.getenv("PVE_CLOUD_DOMAIN"),
-            ProxmoxCloudSecrets.secret_name == f"{os.getenv('PVE_CLOUD_DOMAIN')}-vlogs-storage-node",
+            ProxmoxCloudSecrets.secret_name
+            == f"{os.getenv('PVE_CLOUD_DOMAIN')}-vlogs-storage-node",
         )
         vlselect_auth = session.scalars(stmt).first()
         if vlselect_auth:
-            return jsonify({
-                "auth_present": True,
-                "vlselect_auth": vlselect_auth.secret_data
-            })
+            return jsonify(
+                {"auth_present": True, "vlselect_auth": vlselect_auth.secret_data}
+            )
 
-    return jsonify({
-        "auth_present": False
-    })
+    return jsonify({"auth_present": False})
 
 
 # vlogs client discovery
@@ -206,7 +205,7 @@ def get_client_alertmanagers():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
-    
+
     victoria_clients = []
 
     engine = create_engine(os.getenv("PG_CONN_STR"))
@@ -221,7 +220,7 @@ def get_client_alertmanagers():
                 {
                     "secret_name": secret.secret_name,
                     "secret_data": secret.secret_data,
-                    "cloud_domain": secret.cloud_domain
+                    "cloud_domain": secret.cloud_domain,
                 }
             )
 
