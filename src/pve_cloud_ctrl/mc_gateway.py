@@ -178,7 +178,7 @@ def get_gotify_master():
 
 # vlogs basic auth for master vlselect aggregation
 @app.route("/get-vlselect-auth", methods=["GET"])
-def get_gotify_master():
+def get_vlselect_auth():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
@@ -201,7 +201,7 @@ def get_gotify_master():
 
 # vlogs client discovery
 @app.route("/get-victoria-clients", methods=["GET"])
-def get_client_alertmanagers():
+def get_victoria_clients():
     auth = request.headers.get("Authorization")
     if not auth or auth.split()[1] != os.getenv("MC_TOKEN"):
         return "Unauthorized", 401
