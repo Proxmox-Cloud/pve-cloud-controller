@@ -1,10 +1,9 @@
 import logging
 import os
 
+import requests
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
-import requests
-
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("external-cron")
@@ -14,14 +13,17 @@ def main():
     config.load_incluster_config()
     v1 = client.CoreV1Api()
 
-    response = requests.get(f"https://{os.getenv('MC_GW_HOST')}/get-external-stack-acme/{os.getenv('EXT_STACK_FQDN')}", headers={
-        "Authorization": f"Bearer {os.getenv('EXTERNAL_MC_TOKEN')}"
-    })
+    response = requests.get(
+        f"https://{os.getenv('MC_GW_HOST')}/get-external-stack-acme/{os.getenv('EXT_STACK_FQDN')}",
+        headers={"Authorization": f"Bearer {os.getenv('EXTERNAL_MC_TOKEN')}"},
+    )
     logger.debug(response)
-    
+
     response.raise_for_status()
     if response.status_code == 202:
-        logger.warning(f"Certificate for {os.getenv('EXT_STACK_NAME')} is not yet generated. Please run the awx generation playbooks / check pxc patroni acme_x509 table.")
+        logger.warning(
+            f"Certificate for {os.getenv('EXT_STACK_NAME')} is not yet generated. Please run the awx generation playbooks / check pxc patroni acme_x509 table."
+        )
         return
 
     cert_k8s_data = response.json()
@@ -46,7 +48,7 @@ def main():
             continue
 
         logger.info(f"processing certs {ns.metadata.name}")
-   
+
         try:
             # patch the cluster tls secret - this will always be a patch since its default functionality of pve cloud
             pr = v1.patch_namespaced_secret(
@@ -69,4 +71,3 @@ def main():
                 )
             else:
                 raise
-

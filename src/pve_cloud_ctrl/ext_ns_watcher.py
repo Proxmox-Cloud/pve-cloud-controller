@@ -3,8 +3,8 @@ import os
 import time
 from pprint import pformat
 
-from kubernetes import client, config, watch
 import requests
+from kubernetes import client, config, watch
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("external-watcher")
@@ -29,17 +29,20 @@ def watch_namespaces():
 
         logger.debug(pformat(event))
 
-        if event["type"] == "ADDED":    
+        if event["type"] == "ADDED":
             # query the multi cloud gw for a certificate
 
-            response = requests.get(f"https://{os.getenv('MC_GW_HOST')}/get-external-stack-acme/{os.getenv('EXT_STACK_FQDN')}", headers={
-                "Authorization": f"Bearer {os.getenv('EXTERNAL_MC_TOKEN')}"
-            })
+            response = requests.get(
+                f"https://{os.getenv('MC_GW_HOST')}/get-external-stack-acme/{os.getenv('EXT_STACK_FQDN')}",
+                headers={"Authorization": f"Bearer {os.getenv('EXTERNAL_MC_TOKEN')}"},
+            )
             logger.debug(response)
-            
+
             response.raise_for_status()
             if response.status_code == 202:
-                logger.warning(f"Certificate for {os.getenv('EXT_STACK_NAME')} is not yet generated. Please run the awx generation playbooks / check pxc patroni acme_x509 table.")
+                logger.warning(
+                    f"Certificate for {os.getenv('EXT_STACK_NAME')} is not yet generated. Please run the awx generation playbooks / check pxc patroni acme_x509 table."
+                )
                 continue
 
             cert_k8s_data = response.json()
