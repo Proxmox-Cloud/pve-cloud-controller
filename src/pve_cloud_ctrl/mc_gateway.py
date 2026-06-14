@@ -232,6 +232,28 @@ def get_victoria_clients():
     return jsonify(victoria_clients)
 
 
+@app.route("/get-external-stack-acme/<string:stack_fqdn>", methods=["GET"])
+def get_external_stack_acme_crt(stack_fqdn):
+    auth = request.headers.get("Authorization")
+    if not auth or auth.split()[1] != os.getenv("EXTERNAL_MC_TOKEN"):
+        return "Unauthorized", 401
+    
+    engine = create_engine(os.getenv("PG_CONN_STR"))
+    with Session(engine) as session:
+        stmt = select(AcmeX509).where(
+            AcmeX509.stack_fqdn == stack_fqdn
+        )
+
+        acme_cert = session.scalars(stmt).first()
+        if acme_cert and acme_cert.k8s:
+            return jsonify(acme_cert.k8s)
+        elif acme_cert:
+            return "Cert not yet generated!", 202
+        
+    return "Cert not found!", 404
+
+
+
 def main():
     # todo: change to gunicorn / multi threaded
     app.run(host="0.0.0.0", port=80)
