@@ -153,37 +153,35 @@ def mutate_pod():
                 v1.create_namespaced_secret(namespace=namespace, body=secret)
                 logger.info("created mps")
 
-        # mirroring involves rewriting image repositories for all pods
-        # to our harbor cache repositories / full mirror
-
-        if "initContainers" in pod_spec["spec"]:
-            # preprend harbor.vmz.management/mirror repo
-            for i, container in enumerate(pod_spec["spec"]["initContainers"]):
-                image = container["image"]
-                image_patched = get_patched_image(image)
-
-                if image != image_patched:
-                    patches.append(
-                        {
-                            "op": "replace",
-                            "path": f"/spec/initContainers/{i}/image",
-                            "value": image_patched,
-                        }
-                    )
-
-        # normal containers
-        for i, container in enumerate(pod_spec["spec"]["containers"]):
+    # patch the images of all container (either bitnami only / full mirror patch)
+    if "initContainers" in pod_spec["spec"]:
+        # preprend harbor.vmz.management/mirror repo
+        for i, container in enumerate(pod_spec["spec"]["initContainers"]):
             image = container["image"]
-            image_patched = get_patched_image(image)
+            image_patched = get_patched_image(image, insert_mirror_pull_secret)
 
             if image != image_patched:
                 patches.append(
                     {
                         "op": "replace",
-                        "path": f"/spec/containers/{i}/image",
+                        "path": f"/spec/initContainers/{i}/image",
                         "value": image_patched,
                     }
                 )
+
+    # normal containers
+    for i, container in enumerate(pod_spec["spec"]["containers"]):
+        image = container["image"]
+        image_patched = get_patched_image(image, insert_mirror_pull_secret)
+
+        if image != image_patched:
+            patches.append(
+                {
+                    "op": "replace",
+                    "path": f"/spec/containers/{i}/image",
+                    "value": image_patched,
+                }
+            )
 
     # also check if the general cluster-pull-secret with injection annotation is defined
     # this then also needs to be inserted into the pods pull secrets
