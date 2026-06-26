@@ -48,7 +48,7 @@ def get_patched_image(image: str, apply_mirror: bool):
         image = image.replace("bitnami/", "bitnamilegacy/")
 
     if not apply_mirror:
-        return image # only apply the bitnami patch
+        return image  # only apply the bitnami patch
 
     # first we check if the image is present in the harbor full mirror repository
     registry = image.split("/")[0]
