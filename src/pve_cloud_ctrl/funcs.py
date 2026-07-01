@@ -45,6 +45,7 @@ if route53_key_id and route53_secret_key:
 
 _cluster_cert_entries = None
 
+
 def get_cluster_cert_entries():
     global _cluster_cert_entries
 
@@ -52,11 +53,12 @@ def get_cluster_cert_entries():
         # load the cluster cert conf
         with open("/etc/controller-conf/cluster_cert_entries.json", "r") as f:
             _cluster_cert_entries = json.load(f)
-    
+
     return _cluster_cert_entries
 
 
 _external_domains = None
+
 
 def get_external_domains():
     global _external_domains
