@@ -2,16 +2,14 @@ import base64
 import json
 import logging
 import os
-import subprocess
-import time
 from pprint import pformat
 
 from flask import Flask, jsonify, request
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
-from pve_cloud_ctrl.adm import get_patched_image
 import pve_cloud_ctrl.funcs as funcs
+from pve_cloud_ctrl.adm import get_patched_image
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
 logger = logging.getLogger("ext-adm")
@@ -40,7 +38,7 @@ def mutate_pod():
     # logic inserts patches here
     patches = []
 
-    insert_mirror_pull_secret = False # always false for ext adm controller
+    insert_mirror_pull_secret = False  # always false for ext adm controller
 
     # patch the images of all container (either bitnami only / full mirror patch)
     if "initContainers" in pod_spec["spec"]:
