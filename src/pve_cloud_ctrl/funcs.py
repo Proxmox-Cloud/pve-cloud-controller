@@ -43,18 +43,35 @@ if route53_key_id and route53_secret_key:
         )
 
 
-# load the cluster cert conf
-with open("/etc/controller-conf/cluster_cert_entries.json", "r") as f:
-    cluster_cert_entries = json.load(f)
+_cluster_cert_entries = None
 
-# load externally exposed domains
-with open("/etc/controller-conf/external_domains.json", "r") as f:
-    external_domains = json.load(f)
+def get_cluster_cert_entries():
+    global _cluster_cert_entries
+
+    if not _cluster_cert_entries:
+        # load the cluster cert conf
+        with open("/etc/controller-conf/cluster_cert_entries.json", "r") as f:
+            _cluster_cert_entries = json.load(f)
+    
+    return _cluster_cert_entries
+
+
+_external_domains = None
+
+def get_external_domains():
+    global _external_domains
+
+    if not _external_domains:
+        # load externally exposed domains
+        with open("/etc/controller-conf/external_domains.json", "r") as f:
+            _external_domains = json.load(f)
+
+    return _external_domains
 
 
 def validate_host_allowed(host):
     allowed = False
-    for entry in cluster_cert_entries:
+    for entry in get_cluster_cert_entries():
         zone = entry["zone"]
 
         for name in entry["names"]:
@@ -72,7 +89,7 @@ def validate_host_allowed(host):
 
 def host_exposed(host):
     exposed = False
-    for entry in external_domains:
+    for entry in get_external_domains():
         zone = entry["zone"]
 
         for name in entry["names"]:
