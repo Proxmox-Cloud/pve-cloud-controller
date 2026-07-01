@@ -41,14 +41,14 @@ def get_harbor_repo(registry, image):
 
 
 def get_patched_image(image: str, apply_mirror: bool):
-    patch_registry = os.getenv("HARBOR_MIRROR_HOST")
-
     # bitnami legacy rewrite
     if "bitnami/" in image:
         image = image.replace("bitnami/", "bitnamilegacy/")
 
     if not apply_mirror:
         return image  # only apply the bitnami patch
+
+    patch_registry = os.getenv("HARBOR_MIRROR_HOST")
 
     # first we check if the image is present in the harbor full mirror repository
     registry = image.split("/")[0]
@@ -119,6 +119,8 @@ def mutate_pod():
     patches = []
 
     # check if mirroring is enabled and applies to this pod
+    # todo: this can probably be removed since the k8s adm hook
+    # should already filter out
     exclude_namespace = False
     if os.getenv("EXCLUDE_MIRROR_NAMESPACES"):
         if namespace in os.getenv("EXCLUDE_MIRROR_NAMESPACES").split(","):
