@@ -8,7 +8,6 @@ from flask import Flask, jsonify, request
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
-import pve_cloud_ctrl.funcs as funcs
 from pve_cloud_ctrl.adm import get_patched_image
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()))
