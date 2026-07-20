@@ -34,6 +34,8 @@ def get_harbor_repo(registry, image):
         return "aws-ecr", image.removeprefix("public.ecr.aws/")
     elif registry == "ghcr.io":
         return "github", image.removeprefix("ghcr.io/")
+    elif registry == "registry.k8s.io":
+        return "k8s-io", image.removeprefix("registry.k8s.io/")
     elif registry == "docker.io" or "." not in registry:
         return "docker-hub", image.removeprefix("docker.io/")
     else:
