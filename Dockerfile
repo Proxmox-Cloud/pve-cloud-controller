@@ -11,7 +11,7 @@ COPY requirements.txt ./
 
 RUN if [ -n "$LOCAL_PYPI_IP" ]; then \
         echo "Running tdd build"; \
-        pip install --upgrade --index-url http://$LOCAL_PYPI_IP:8088/simple --trusted-host $LOCAL_PYPI_IP -r requirements.txt; \
+        pip install --upgrade --upgrade-strategy eager --no-cache-dir --index-url http://$LOCAL_PYPI_IP:8088/simple --trusted-host $LOCAL_PYPI_IP -r requirements.txt; \
     else \
         echo "Running normal build"; \
         pip install -r requirements.txt; \
