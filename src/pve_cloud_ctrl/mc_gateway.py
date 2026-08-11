@@ -19,7 +19,7 @@ logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(
 logger = logging.getLogger("multi-cloud")
 
 app = Flask(__name__)
-socketio = SocketIO(app, logger=True, engineio_logger=True)
+socketio = SocketIO(app, logger=True, engineio_logger=True, ping_interval=60, ping_timeout=60) # increase for io blocking ops
 
 
 # this method gets called by other clouds controllers when there is an update happening
