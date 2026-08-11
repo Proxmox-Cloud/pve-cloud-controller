@@ -1,19 +1,17 @@
+import base64
 import logging
 import os
+import pickle
 import socket
 import ssl
-import base64
+import struct
 
 from flask import Flask, jsonify, request
-from flask_socketio import SocketIO, emit, ConnectionRefusedError
+from flask_socketio import ConnectionRefusedError, SocketIO, emit
+from pve_cloud.lib.backup_rpc import Command
 from pve_cloud.orm.alchemy import AcmeX509, ProxmoxCloudSecrets
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
-
-from pve_cloud.lib.backup_rpc import Command
-
-import struct
-import pickle
 
 import pve_cloud_ctrl.funcs as funcs
 
@@ -22,6 +20,7 @@ logger = logging.getLogger("multi-cloud")
 
 app = Flask(__name__)
 socketio = SocketIO(app, logger=True, engineio_logger=True)
+
 
 # this method gets called by other clouds controllers when there is an update happening
 @app.route("/ingress-ddns-update", methods=["POST"])
@@ -261,7 +260,8 @@ def get_external_stack_acme_crt(stack_fqdn):
 
 
 # socket io backup funneling
-bdd_connections = {} # each websocket client gets a dedicated connection here
+bdd_connections = {}  # each websocket client gets a dedicated connection here
+
 
 def recv_exactly(sock, n):
     data = bytearray()
@@ -274,12 +274,13 @@ def recv_exactly(sock, n):
 
     return bytes(data)
 
+
 @socketio.on("connect")
 def socketio_connect(auth):
     logger.info("connected")
     logger.info(auth)
     if not auth or auth.get("token") != os.getenv("EXTERNAL_MC_TOKEN"):
-        raise ConnectionRefusedError('Unauthorized!')
+        raise ConnectionRefusedError("Unauthorized!")
 
     # client simply has to send the bdd target stack name and the token
     # then we use the clouds internal discovery to connect to the backup server
@@ -292,8 +293,7 @@ def socketio_connect(auth):
     with Session(engine) as session:
         stmt = select(ProxmoxCloudSecrets).where(
             ProxmoxCloudSecrets.cloud_domain == os.getenv("PVE_CLOUD_DOMAIN"),
-            ProxmoxCloudSecrets.secret_name
-            == f"{bdd_stack_name}-bdd-tls-discovery",
+            ProxmoxCloudSecrets.secret_name == f"{bdd_stack_name}-bdd-tls-discovery",
         )
         bdd_discovery = session.scalars(stmt).first()
 
@@ -307,13 +307,9 @@ def socketio_connect(auth):
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
-    raw_sock = socket.create_connection(
-        (bdd_server_ip, 8085)
-    )
+    raw_sock = socket.create_connection((bdd_server_ip, 8085))
 
-    backend = ssl_ctx.wrap_socket(
-        raw_sock
-    )
+    backend = ssl_ctx.wrap_socket(raw_sock)
     bdd_connections[request.sid] = backend
 
 
@@ -323,7 +319,7 @@ def socketio_disconnect(auth):
     backend = bdd_connections.pop(request.sid, None)
 
     if backend:
-        backend.shutdown(socket.SHUT_WR) # gentle shutdown
+        backend.shutdown(socket.SHUT_WR)  # gentle shutdown
         backend.close()
 
 
@@ -331,17 +327,13 @@ def socketio_disconnect(auth):
 def bdd_init_archive(request_dict):
     backend = bdd_connections[request.sid]
 
-    backend.sendall(
-        struct.pack("B", Command.ARCHIVE.value)
-    )
+    backend.sendall(struct.pack("B", Command.ARCHIVE.value))
 
     logger.info("request_dict")
     logger.info(request_dict)
     data = pickle.dumps(request_dict)
 
-    backend.sendall(
-        struct.pack("!I", len(data))
-    )
+    backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
     signal = recv_exactly(backend, 1)
@@ -361,9 +353,7 @@ def bdd_init_archive(request_dict):
 def backup_chunk(data):
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("!I", len(data))
-    )
+    backend.sendall(struct.pack("!I", len(data)))
 
     backend.sendall(data)
 
@@ -374,36 +364,30 @@ def backup_chunk(data):
 def backup_eof():
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("!I", 0)
-    )
+    backend.sendall(struct.pack("!I", 0))
 
     return None
+
 
 @socketio.on("bdd_meta")
 def bdd_meta(data):
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("B", data["command"])
-    )
+    backend.sendall(struct.pack("B", data["command"]))
 
     meta_pickled = pickle.dumps(data["meta_dict"])
 
-    backend.sendall(
-        struct.pack("!I", len(meta_pickled))
-    )
+    backend.sendall(struct.pack("!I", len(meta_pickled)))
     backend.sendall(meta_pickled)
 
     return None
+
 
 @socketio.on("list_backup_details")
 def bdd_backup_details(timestamp):
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("B", Command.LIST_BACKUP_DETAILS.value)
-    )
+    backend.sendall(struct.pack("B", Command.LIST_BACKUP_DETAILS.value))
 
     backend.sendall((timestamp + "\n").encode())
 
@@ -424,35 +408,26 @@ def bdd_backup_details(timestamp):
 
     backend.sendall("##BRCTL-DONE\n".encode())
 
-    return {
-        "metas": metas,
-        "stack_meta": stack_meta
-    }
+    return {"metas": metas, "stack_meta": stack_meta}
 
 
 @socketio.on("list_backups")
 def bdd_list_backups():
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("B", Command.LIST_BACKUPS.value)
-    )
+    backend.sendall(struct.pack("B", Command.LIST_BACKUPS.value))
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
     archives = pickle.loads(recv_exactly(backend, dict_size))
 
-    return {
-        "archives": archives
-    }
+    return {"archives": archives}
 
 
 @socketio.on("init_restore")
 def bdd_init_restore(timestamp):
     backend = bdd_connections.get(request.sid)
 
-    backend.sendall(
-        struct.pack("B", Command.RESTORE_PROCEDURE.value)
-    )
+    backend.sendall(struct.pack("B", Command.RESTORE_PROCEDURE.value))
 
     backend.sendall((timestamp + "\n").encode())
 
@@ -474,10 +449,12 @@ def bdd_init_restore(timestamp):
         base64.b64decode(stack_meta["namespace_secret_dict_b64"])
     )
 
-    return pickle.dumps({
-        "metas_grouped_by_ns": metas_grouped_by_ns,
-        "namespace_secret_dict": namespace_secret_dict
-    })
+    return pickle.dumps(
+        {
+            "metas_grouped_by_ns": metas_grouped_by_ns,
+            "namespace_secret_dict": namespace_secret_dict,
+        }
+    )
 
 
 @socketio.on("init_request")
@@ -492,6 +469,7 @@ def bdd_init_request(request_dict):
 
     return None
 
+
 # needs to be called after init_request
 @socketio.on("request_chunk")
 def bdd_request_chunk():
@@ -499,9 +477,10 @@ def bdd_request_chunk():
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
     if dict_size == 0:
-        return None #EOF
+        return None  # EOF
 
     return recv_exactly(backend, dict_size)
+
 
 @socketio.on("request_done")
 def bdd_request_done():
@@ -513,4 +492,4 @@ def bdd_request_done():
 
 
 def main():
-    socketio.run(app, host="0.0.0.0", port=80) # change to mainstream 5000?
+    socketio.run(app, host="0.0.0.0", port=80)  # change to mainstream 5000?
