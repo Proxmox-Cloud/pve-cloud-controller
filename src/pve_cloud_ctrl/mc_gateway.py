@@ -330,9 +330,7 @@ def receive_archive_signal(backend):
 
     if signal == b"\x02":
         logger.debug("waiting for log, continue wait keepalive received.")
-        return {
-            "status": "WAIT"
-        }
+        return {"status": "WAIT"}
 
     if signal != b"\x01":
         logger.error("Received incorrect go signal!")
@@ -345,6 +343,7 @@ def receive_archive_signal(backend):
     return {
         "status": "ACQUIRED",
     }
+
 
 # this proxy call will ask the server to init a backup process
 # which the server will respond with ok as soon as it accuried a lokc
@@ -365,11 +364,13 @@ def bdd_init_archive(request_dict):
 
     return receive_archive_signal(backend)
 
+
 @socketio.on("wait_archive")
 def bdd_wait_archive():
     backend = bdd_connections[request.sid]
 
     return receive_archive_signal(backend)
+
 
 @socketio.on("backup_chunk")
 def backup_chunk(data):
