@@ -325,6 +325,30 @@ def socketio_disconnect(auth):
         backend.close()
 
 
+def receive_archive_signal(backend):
+    signal = recv_exactly(backend, 1)
+
+    if signal == b"\x02":
+        logger.debug("waiting for log, continue wait keepalive received.")
+        return {
+            "status": "WAIT"
+        }
+
+    if signal != b"\x01":
+        logger.error("Received incorrect go signal!")
+        return {
+            "status": "ERR",
+            "error": "INCORRECT_GO_SIGNAL",
+        }
+
+    logger.debug("received correct go!")
+    return {
+        "status": "ACQUIRED",
+    }
+
+# this proxy call will ask the server to init a backup process
+# which the server will respond with ok as soon as it accuried a lokc
+# on the backup repository
 @socketio.on("archive_init")
 def bdd_init_archive(request_dict):
     backend = bdd_connections[request.sid]
@@ -339,28 +363,13 @@ def bdd_init_archive(request_dict):
     backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
-    # wait for the log
-    while True:
-        signal = recv_exactly(backend, 1)
+    return receive_archive_signal(backend)
 
-        if signal == b"\x02":
-            logger.debug("waiting for log, continue wait keepalive received.")
-            continue
+@socketio.on("wait_archive")
+def bdd_wait_archive():
+    backend = bdd_connections[request.sid]
 
-        if signal != b"\x01":
-            logger.error("Received incorrect go signal!")
-            return {
-                "ok": False,
-                "error": "INCORRECT_GO_SIGNAL",
-            }
-        else:
-            break  # lock acquired
-
-    logger.debug("received correct go!")
-    return {
-        "ok": True,
-    }
-
+    return receive_archive_signal(backend)
 
 @socketio.on("backup_chunk")
 def backup_chunk(data):
