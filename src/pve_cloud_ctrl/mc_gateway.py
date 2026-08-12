@@ -354,7 +354,7 @@ def bdd_init_archive(request_dict):
                 "error": "INCORRECT_GO_SIGNAL",
             }
         else:
-            break # lock acquired
+            break  # lock acquired
 
     logger.debug("received correct go!")
     return {
