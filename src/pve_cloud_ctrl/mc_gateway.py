@@ -339,14 +339,22 @@ def bdd_init_archive(request_dict):
     backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
-    signal = recv_exactly(backend, 1)
+    # wait for the log
+    while True:
+        signal = recv_exactly(backend, 1)
 
-    if signal != b"\x01":
-        logger.error("Received incorrect go signal!")
-        return {
-            "ok": False,
-            "error": "INCORRECT_GO_SIGNAL",
-        }
+        if signal == b"\x02":
+            logger.debug("waiting for log, continue wait keepalive received.")
+            continue
+
+        if signal != b"\x01":
+            logger.error("Received incorrect go signal!")
+            return {
+                "ok": False,
+                "error": "INCORRECT_GO_SIGNAL",
+            }
+        else:
+            break # lock acquired
 
     logger.debug("received correct go!")
     return {
