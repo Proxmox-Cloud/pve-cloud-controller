@@ -335,17 +335,20 @@ def bdd_init_archive(request_dict):
     logger.info(request_dict)
     data = pickle.dumps(request_dict)
 
+    logger.debug(f"sending data {len(data)}")
     backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
     signal = recv_exactly(backend, 1)
 
     if signal != b"\x01":
+        logger.error("Received incorrect go signal!")
         return {
             "ok": False,
             "error": "INCORRECT_GO_SIGNAL",
         }
 
+    logger.debug("received correct go!")
     return {
         "ok": True,
     }
@@ -355,19 +358,23 @@ def bdd_init_archive(request_dict):
 def backup_chunk(data):
     backend = bdd_connections.get(request.sid)
 
+    logger.debug(f"received backup chunk {len(data)}")
     backend.sendall(struct.pack("!I", len(data)))
 
     backend.sendall(data)
 
+    logger.debug("backup chunk send")
     return None
 
 
 @socketio.on("backup_eof")
 def backup_eof():
     backend = bdd_connections.get(request.sid)
+    logger.debug("received backup eof")
 
     backend.sendall(struct.pack("!I", 0))
 
+    logger.debug("backup eof send")
     return None
 
 
