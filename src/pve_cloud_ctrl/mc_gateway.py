@@ -381,7 +381,6 @@ def backup_chunk(data):
 
     backend.sendall(data)
 
-    logger.debug("backup chunk send")
     return None
 
 
