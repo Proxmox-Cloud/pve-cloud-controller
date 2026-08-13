@@ -5,6 +5,7 @@ import pickle
 import socket
 import ssl
 import struct
+import queue
 
 from flask import Flask, jsonify, request
 from flask_socketio import ConnectionRefusedError, SocketIO, emit
@@ -345,6 +346,8 @@ def receive_archive_signal(backend):
     }
 
 
+archive_worker_queues = {}
+
 # this proxy call will ask the server to init a backup process
 # which the server will respond with ok as soon as it accuried a lokc
 # on the backup repository
@@ -362,6 +365,27 @@ def bdd_init_archive(request_dict):
     backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
+    # init background worker thats used for async processing
+    # in backup_chunk
+    q = queue.Queue(maxsize=8) # max 8x 4mb chunks in buffer
+    def backup_writer():
+        while True:
+            chunk = q.get()
+
+            try:
+                if chunk is None:
+                    return # finished
+
+                backend.sendall(struct.pack("!I", len(data)))
+
+                backend.sendall(data)
+            finally:
+                q.task_done() # counter -1
+
+    worker_handle = socketio.start_background_task(backup_writer)
+
+    archive_worker_queues[request.sid] = (q, worker_handle)
+
     return receive_archive_signal(backend)
 
 
@@ -374,12 +398,10 @@ def bdd_wait_archive():
 
 @socketio.on("backup_chunk")
 def backup_chunk(data):
-    backend = bdd_connections.get(request.sid)
-
     logger.debug(f"received backup chunk {len(data)}")
-    backend.sendall(struct.pack("!I", len(data)))
+    queue, _ = archive_worker_queues.get(request.sid)
 
-    backend.sendall(data)
+    queue.put(data)
 
     return None
 
@@ -387,8 +409,18 @@ def backup_chunk(data):
 @socketio.on("backup_eof")
 def backup_eof():
     backend = bdd_connections.get(request.sid)
+    queue, worker = archive_worker_queues.get(request.sid)
     logger.debug("received backup eof")
 
+    # put queue exit signal
+    queue.put(None)
+
+    # first wait for the queue to drain and the worker to exit
+    queue.join()
+    worker.join()
+    archive_worker_queues.pop(request.sid, None)
+
+    # send eof to our target server
     backend.sendall(struct.pack("!I", 0))
 
     logger.debug("backup eof send")
