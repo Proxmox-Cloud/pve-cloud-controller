@@ -2,10 +2,10 @@ import base64
 import logging
 import os
 import pickle
+import queue
 import socket
 import ssl
 import struct
-import queue
 
 from flask import Flask, jsonify, request
 from flask_socketio import ConnectionRefusedError, SocketIO, emit
@@ -348,6 +348,7 @@ def receive_archive_signal(backend):
 
 archive_worker_queues = {}
 
+
 # this proxy call will ask the server to init a backup process
 # which the server will respond with ok as soon as it accuried a lokc
 # on the backup repository
@@ -367,20 +368,21 @@ def bdd_init_archive(request_dict):
 
     # init background worker thats used for async processing
     # in backup_chunk
-    q = queue.Queue(maxsize=8) # max 8x 4mb chunks in buffer
+    q = queue.Queue(maxsize=8)  # max 8x 4mb chunks in buffer
+
     def backup_writer():
         while True:
             chunk = q.get()
 
             try:
                 if chunk is None:
-                    return # finished
+                    return  # finished
 
                 backend.sendall(struct.pack("!I", len(data)))
 
                 backend.sendall(data)
             finally:
-                q.task_done() # counter -1
+                q.task_done()  # counter -1
 
     worker_handle = socketio.start_background_task(backup_writer)
 
