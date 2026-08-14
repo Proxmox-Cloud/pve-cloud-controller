@@ -320,6 +320,7 @@ def socketio_connect(auth):
 
 archive_worker_queues = {}
 
+
 @socketio.on("disconnect")
 def socketio_disconnect(auth):
     logger.info(f"socket disconnected {request.sid}")
@@ -334,7 +335,7 @@ def socketio_disconnect(auth):
             logger.warn(f"Error on backend shutdown {e}")
 
     if worker_queue:
-        worker_queue[0].put_nowait(None) # that should cancel the worker at some point
+        worker_queue[0].put_nowait(None)  # that should cancel the worker at some point
 
 
 def receive_archive_signal(backend):
