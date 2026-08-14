@@ -20,8 +20,10 @@ logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(
 logger = logging.getLogger("multi-cloud")
 
 app = Flask(__name__)
+
+log_debug = os.getenv("LOG_LEVEL") == "DEBUG"
 socketio = SocketIO(
-    app, logger=True, engineio_logger=True, ping_interval=60, ping_timeout=60
+    app, logger=log_debug, engineio_logger=log_debug, ping_interval=60, ping_timeout=60
 )  # increase for io blocking ops
 
 
@@ -316,14 +318,23 @@ def socketio_connect(auth):
     bdd_connections[request.sid] = backend
 
 
+archive_worker_queues = {}
+
 @socketio.on("disconnect")
 def socketio_disconnect(auth):
     logger.info(f"socket disconnected {request.sid}")
     backend = bdd_connections.pop(request.sid, None)
+    worker_queue = archive_worker_queues.pop(request.sid, None)
 
     if backend:
-        backend.shutdown(socket.SHUT_WR)  # gentle shutdown
-        backend.close()
+        try:
+            backend.shutdown(socket.SHUT_WR)  # gentle shutdown
+            backend.close()
+        except OSError as e:
+            logger.warn(f"Error on backend shutdown {e}")
+
+    if worker_queue:
+        worker_queue[0].put_nowait(None) # that should cancel the worker at some point
 
 
 def receive_archive_signal(backend):
@@ -346,9 +357,6 @@ def receive_archive_signal(backend):
     }
 
 
-archive_worker_queues = {}
-
-
 # this proxy call will ask the server to init a backup process
 # which the server will respond with ok as soon as it accuried a lokc
 # on the backup repository
@@ -358,8 +366,7 @@ def bdd_init_archive(request_dict):
 
     backend.sendall(struct.pack("B", Command.ARCHIVE.value))
 
-    logger.info("request_dict")
-    logger.info(request_dict)
+    logger.info("request_dict: %s", request_dict)
     data = pickle.dumps(request_dict)
 
     logger.debug(f"sending data {len(data)}")
@@ -378,9 +385,10 @@ def bdd_init_archive(request_dict):
                 if chunk is None:
                     return  # finished
 
-                backend.sendall(struct.pack("!I", len(data)))
+                logger.debug(f"worker sending chunk {len(chunk)}")
 
-                backend.sendall(data)
+                backend.sendall(struct.pack("!I", len(chunk)))
+                backend.sendall(chunk)
             finally:
                 q.task_done()  # counter -1
 
@@ -416,10 +424,13 @@ def backup_eof():
 
     # put queue exit signal
     queue.put(None)
+    logger.debug("put none exit signal")
 
     # first wait for the queue to drain and the worker to exit
     queue.join()
+    logger.debug("joined queue")
     worker.join()
+    logger.debug("joined worker")
     archive_worker_queues.pop(request.sid, None)
 
     # send eof to our target server
@@ -520,8 +531,7 @@ def bdd_init_restore(timestamp):
 @socketio.on("init_request")
 def bdd_init_request(request_dict):
     backend = bdd_connections.get(request.sid)
-    logger.info("received init_request")
-    logger.info(request_dict)
+    logger.info("received init_request: %s", request_dict)
 
     # this requests a stream of the actual backup raw image
     backend.sendall(request_dict["archive"].encode())
