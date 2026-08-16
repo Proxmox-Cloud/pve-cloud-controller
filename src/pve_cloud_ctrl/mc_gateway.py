@@ -341,7 +341,9 @@ def socketio_disconnect(auth):
         if worker_queue[1].is_alive():
             try:
                 logger.debug("inserting none exit signal into queue")
-                worker_queue[0].put_nowait(None) # that should cancel the worker at some point
+                worker_queue[0].put_nowait(
+                    None
+                )  # that should cancel the worker at some point
             except queue.Full:
                 logger.warn("queue is full, trying to join worker...")
                 worker_queue[1].join(timeout=5)
