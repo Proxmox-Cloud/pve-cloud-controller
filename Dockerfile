@@ -9,6 +9,7 @@ RUN apk add --no-cache skopeo
 # install requirements in seperate layer
 COPY requirements.txt ./
 
+ARG CACHEBUST
 RUN if [ -n "$LOCAL_PYPI_IP" ]; then \
         echo "Running tdd build"; \
         pip install --upgrade --upgrade-strategy eager --no-cache-dir --index-url http://$LOCAL_PYPI_IP:8088/simple --trusted-host $LOCAL_PYPI_IP -r requirements.txt; \
