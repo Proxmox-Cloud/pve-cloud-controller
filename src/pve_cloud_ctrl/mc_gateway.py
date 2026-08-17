@@ -409,6 +409,10 @@ def bdd_init_archive(request_dict):
                 backend.sendall(struct.pack("!I", len(chunk)))
                 backend.sendall(chunk)
 
+                ack = recv_exactly(backend, 1)
+                if ack != b"\x01":
+                    raise RuntimeError("Expected x01 ack byte!")
+
             finally:
                 q.task_done()  # counter -1
 
@@ -495,8 +499,6 @@ def bdd_backup_details(timestamp):
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
     stack_meta = pickle.loads(recv_exactly(backend, dict_size))
 
-    backend.sendall("##BRCTL-DONE\n".encode())
-
     return {"metas": metas, "stack_meta": stack_meta}
 
 
@@ -560,6 +562,8 @@ def bdd_init_request(request_dict):
 
 
 # needs to be called after init_request
+# todo: this should also be put into a background worker
+# to improve performance
 @socketio.on("request_chunk")
 def bdd_request_chunk():
     backend = bdd_connections.get(request.sid)
@@ -569,7 +573,12 @@ def bdd_request_chunk():
         logger.debug("received eof signal from backend")
         return None  # EOF
 
-    return recv_exactly(backend, dict_size)
+    chunk = recv_exactly(backend, dict_size)
+
+    # send ack
+    backend.sendall(b"\x01")
+
+    return chunk
 
 
 def main():
