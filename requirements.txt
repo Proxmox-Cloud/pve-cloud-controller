@@ -1,5 +1,5 @@
 # pessimistic operator for local tdd installs (pip install -e .)
-py-pve-cloud>=3.4.2,<3.5.0
+py-pve-cloud>=3.4.3,<3.5.0
 flask==3.1.2
 Flask-SocketIO==5.6.1
 kubernetes==34.1.0
