@@ -23,7 +23,7 @@ app = Flask(__name__)
 
 log_debug = os.getenv("LOG_LEVEL") == "DEBUG"
 socketio = SocketIO(
-    app, logger=log_debug, engineio_logger=log_debug, ping_interval=60, ping_timeout=60
+    app, ping_interval=60, ping_timeout=60 # logger=log_debug, engineio_logger=log_debug,
 )  # increase for io blocking ops
 
 
