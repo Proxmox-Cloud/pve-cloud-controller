@@ -28,6 +28,7 @@ socketio = SocketIO(
 )  # increase for io blocking ops => probably not needed
 # can also pass logger=True, engineio_logger=True to get extremely detailed network logs!
 
+
 # this method gets called by other clouds controllers when there is an update happening
 @app.route("/ingress-ddns-update", methods=["POST"])
 def post_ingress_ddns_update():
@@ -323,6 +324,7 @@ def socketio_connect(auth):
 archive_worker_queues = {}
 request_worker_queues = {}
 
+
 @socketio.on("disconnect")
 def socketio_disconnect(auth):
     logger.info(f"socket disconnected {request.sid}")
@@ -353,7 +355,9 @@ def socketio_disconnect(auth):
 
     if request_queue:
         if request_queue[1].is_alive():
-            logger.error("request reader worker is still alive even through backend got shut down!")
+            logger.error(
+                "request reader worker is still alive even through backend got shut down!"
+            )
 
 
 # backups at the server are sequential per repository and the client
@@ -575,7 +579,7 @@ def bdd_init_request(request_dict):
             if dict_size == 0:
                 logger.debug("received eof signal from backend, propagating...")
                 q.put(None)  # EOF
-                break # exit the worker
+                break  # exit the worker
 
             chunk = recv_exactly(backend, dict_size)
             q.put(chunk)
@@ -601,7 +605,7 @@ def bdd_request_chunk():
     chunk = queue.get()
 
     # delete worker queue, thread exited on its own
-    if chunk is None: # eof signal from server
+    if chunk is None:  # eof signal from server
         request_worker_queues.pop(request.sid, None)
 
     return chunk
