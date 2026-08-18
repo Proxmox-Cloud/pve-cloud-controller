@@ -8,7 +8,7 @@ import ssl
 import struct
 
 from flask import Flask, jsonify, request
-from flask_socketio import ConnectionRefusedError, SocketIO, emit
+from flask_socketio import ConnectionRefusedError, SocketIO
 from pve_cloud.lib.backup_rpc import Command
 from pve_cloud.orm.alchemy import AcmeX509, ProxmoxCloudSecrets
 from sqlalchemy import create_engine, select, update
@@ -21,13 +21,12 @@ logger = logging.getLogger("multi-cloud")
 
 app = Flask(__name__)
 
-log_debug = os.getenv("LOG_LEVEL") == "DEBUG"
 socketio = SocketIO(
     app,
     ping_interval=60,
-    ping_timeout=60,  # logger=log_debug, engineio_logger=log_debug,
-)  # increase for io blocking ops
-
+    ping_timeout=60,
+)  # increase for io blocking ops => probably not needed
+# can also pass logger=True, engineio_logger=True to get extremely detailed network logs!
 
 # this method gets called by other clouds controllers when there is an update happening
 @app.route("/ingress-ddns-update", methods=["POST"])
@@ -320,14 +319,16 @@ def socketio_connect(auth):
     bdd_connections[request.sid] = backend
 
 
+# buffer queues for reading / writing backups
 archive_worker_queues = {}
-
+request_worker_queues = {}
 
 @socketio.on("disconnect")
 def socketio_disconnect(auth):
     logger.info(f"socket disconnected {request.sid}")
     backend = bdd_connections.pop(request.sid, None)
-    worker_queue = archive_worker_queues.pop(request.sid, None)
+    archive_queue = archive_worker_queues.pop(request.sid, None)
+    request_queue = request_worker_queues.pop(request.sid, None)
 
     if backend:
         logger.debug("found connection to bdd server backend, shutting down...")
@@ -337,20 +338,26 @@ def socketio_disconnect(auth):
         except OSError as e:
             logger.warn(f"Error on backend shutdown {e}")
 
-    if worker_queue:
+    if archive_queue:
         logger.debug("found active worker queue")
         # if the thread is no longer running we dont need to do anything
-        if worker_queue[1].is_alive():
+        if archive_queue[1].is_alive():
             try:
                 logger.debug("inserting none exit signal into queue")
-                worker_queue[0].put_nowait(
+                archive_queue[0].put_nowait(
                     None
                 )  # that should cancel the worker at some point
             except queue.Full:
                 logger.warn("queue is full, trying to join worker...")
-                worker_queue[1].join(timeout=5)
+                archive_queue[1].join(timeout=5)
+
+    if request_queue:
+        if request_queue[1].is_alive():
+            logger.error("request reader worker is still alive even through backend got shut down!")
 
 
+# backups at the server are sequential per repository and the client
+# may need to wait
 def receive_archive_signal(backend):
     signal = recv_exactly(backend, 1)
 
@@ -376,14 +383,15 @@ def receive_archive_signal(backend):
 # on the backup repository
 @socketio.on("archive_init")
 def bdd_init_archive(request_dict):
+    logger.info("request_dict: %s", request_dict)
+
     backend = bdd_connections[request.sid]
 
     backend.sendall(struct.pack("B", Command.ARCHIVE.value))
 
-    logger.info("request_dict: %s", request_dict)
     data = pickle.dumps(request_dict)
-
     logger.debug(f"sending data {len(data)}")
+
     backend.sendall(struct.pack("!I", len(data)))
     backend.sendall(data)
 
@@ -404,7 +412,7 @@ def bdd_init_archive(request_dict):
                 # minimize log spam in dbg level
                 dbg_chunk_counter += 1
                 if dbg_chunk_counter % 100 == 0:
-                    logger.debug(f"worker sending chunk {len(chunk)}")
+                    logger.debug(f"backup_writer sending chunk {len(chunk)}")
 
                 backend.sendall(struct.pack("!I", len(chunk)))
                 backend.sendall(chunk)
@@ -446,25 +454,25 @@ def backup_eof():
 
     # put queue exit signal
     queue.put(None)
-    logger.debug("put none exit signal")
 
     # first wait for the queue to drain and the worker to exit
+    logger.debug("joining queue and worker")
     queue.join()
-    logger.debug("joined queue")
     worker.join()
-    logger.debug("joined worker")
+
+    # cleanup dict
     archive_worker_queues.pop(request.sid, None)
 
     # send eof to our target server
     backend.sendall(struct.pack("!I", 0))
 
-    logger.debug("backup eof send")
     return None
 
 
 @socketio.on("bdd_meta")
 def bdd_meta(data):
     backend = bdd_connections.get(request.sid)
+    logger.debug("sending meta dict: %s", data)
 
     backend.sendall(struct.pack("B", data["command"]))
 
@@ -481,7 +489,6 @@ def bdd_backup_details(timestamp):
     backend = bdd_connections.get(request.sid)
 
     backend.sendall(struct.pack("B", Command.LIST_BACKUP_DETAILS.value))
-
     backend.sendall((timestamp + "\n").encode())
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
@@ -489,7 +496,6 @@ def bdd_backup_details(timestamp):
 
     # first we group metas
     k8s_stack = metas[0]["stack"]
-
     logger.info(f"k8s stack {k8s_stack}")
 
     # query the server for backup secrets
@@ -517,9 +523,9 @@ def bdd_list_backups():
 @socketio.on("init_restore")
 def bdd_init_restore(timestamp):
     backend = bdd_connections.get(request.sid)
+    logger.debug("init restore procedure: %s", timestamp)
 
     backend.sendall(struct.pack("B", Command.INIT_RESTORE_PROCEDURE.value))
-
     backend.sendall((timestamp + "\n").encode())
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
@@ -553,30 +559,50 @@ def bdd_init_request(request_dict):
     backend = bdd_connections.get(request.sid)
     logger.info("received init_request: %s", request_dict)
 
-    backend.sendall(struct.pack("B", Command.REQUEST_ARCHIVE.value))
     # this requests a stream of the actual backup raw image
+    backend.sendall(struct.pack("B", Command.REQUEST_ARCHIVE.value))
     backend.sendall(request_dict["archive"].encode())
     backend.sendall(request_dict["artifact"].encode())
+
+    # worker thread that will take care of reading chunks from the backup server async
+    q = queue.Queue(maxsize=8)  # max 8x 4mb chunks in buffer
+
+    def backup_reader():
+        dbg_chunk_counter = 0
+
+        while True:
+            dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
+            if dict_size == 0:
+                logger.debug("received eof signal from backend, propagating...")
+                q.put(None)  # EOF
+                break # exit the worker
+
+            chunk = recv_exactly(backend, dict_size)
+            q.put(chunk)
+
+            dbg_chunk_counter += 1
+            if dbg_chunk_counter % 100 == 0:
+                logger.debug(f"backup_reader fetched chunk {len(chunk)}")
+
+            # send ack
+            backend.sendall(b"\x01")
+
+    worker_handle = socketio.start_background_task(backup_reader)
+    request_worker_queues[request.sid] = (q, worker_handle)
 
     return None
 
 
 # needs to be called after init_request
-# todo: this should also be put into a background worker
-# to improve performance
 @socketio.on("request_chunk")
 def bdd_request_chunk():
-    backend = bdd_connections.get(request.sid)
+    queue, _ = request_worker_queues.get(request.sid)
 
-    dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    if dict_size == 0:
-        logger.debug("received eof signal from backend")
-        return None  # EOF
+    chunk = queue.get()
 
-    chunk = recv_exactly(backend, dict_size)
-
-    # send ack
-    backend.sendall(b"\x01")
+    # delete worker queue, thread exited on its own
+    if chunk is None: # eof signal from server
+        request_worker_queues.pop(request.sid, None)
 
     return chunk
 
