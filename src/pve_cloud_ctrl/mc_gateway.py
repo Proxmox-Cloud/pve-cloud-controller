@@ -485,6 +485,10 @@ def bdd_meta(data):
     backend.sendall(struct.pack("!I", len(meta_pickled)))
     backend.sendall(meta_pickled)
 
+    ack = recv_exactly(backend, 1)
+    if ack != b"\x01":
+        raise RuntimeError("Expected x01 ack byte!")
+
     return None
 
 
