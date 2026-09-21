@@ -97,8 +97,8 @@ def get_patched_image(image: str, apply_mirror: bool):
             image  # if no harbor cache was found for the registry we use the original
         )
 
-    logger.info("orig image: " + image)
-    logger.info("patched image: " + patched_image)
+    logger.info(f"orig image: {image}")
+    logger.info(f"patched image: {patched_image}")
 
     return patched_image
 
