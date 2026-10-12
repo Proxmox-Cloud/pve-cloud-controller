@@ -7,6 +7,9 @@ build_commands = [
   ],
   [
     "docker", "push", "$REGISTRY_IP:5000/pve-cloud-controller:$VERSION"
+  ],
+  [
+    "tddog", "clean-docker", "$REGISTRY_IP:5000/pve-cloud-controller"
   ]
 ]
 dyn_version_py_path = "src/pve_cloud_ctrl/_version.py"
