@@ -500,20 +500,13 @@ def bdd_backup_details(timestamp):
     backend.sendall((timestamp + "\n").encode())
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    metas = pickle.loads(recv_exactly(backend, dict_size))
-
-    # first we group metas
-    k8s_stack = metas[0]["stack"]
-    logger.info(f"k8s stack {k8s_stack}")
-
-    # query the server for backup secrets
-    backend.sendall((k8s_stack + "\n").encode())
+    volume_metas = pickle.loads(recv_exactly(backend, dict_size))
 
     # read the meta information
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    stack_meta = pickle.loads(recv_exactly(backend, dict_size))
+    stack_secrets = pickle.loads(recv_exactly(backend, dict_size))
 
-    return {"metas": metas, "stack_meta": stack_meta}
+    return {"volume_metas": volume_metas, "stack_secrets": stack_secrets}
 
 
 @socketio.on("list_backups")
@@ -523,9 +516,9 @@ def bdd_list_backups():
     backend.sendall(struct.pack("B", Command.LIST_BACKUPS.value))
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    archives = pickle.loads(recv_exactly(backend, dict_size))
+    volume_metas = pickle.loads(recv_exactly(backend, dict_size))
 
-    return {"archives": archives}
+    return {"volume_metas": volume_metas}
 
 
 @socketio.on("init_restore")
@@ -537,21 +530,21 @@ def bdd_init_restore(timestamp):
     backend.sendall((timestamp + "\n").encode())
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    metas = pickle.loads(recv_exactly(backend, dict_size))
+    volume_metas = pickle.loads(recv_exactly(backend, dict_size))
 
     metas_grouped_by_ns = {}
 
-    for meta in metas:
+    for meta in volume_metas:
         if meta["namespace"] not in metas_grouped_by_ns:
             metas_grouped_by_ns[meta["namespace"]] = []
 
         metas_grouped_by_ns[meta["namespace"]].append(meta)
 
     dict_size = struct.unpack("!I", recv_exactly(backend, 4))[0]
-    stack_meta = pickle.loads(recv_exactly(backend, dict_size))
+    stack_secrets = pickle.loads(recv_exactly(backend, dict_size))
 
     namespace_secret_dict = pickle.loads(
-        base64.b64decode(stack_meta["namespace_secret_dict_b64"])
+        base64.b64decode(stack_secrets["namespace_secret_dict_b64"])
     )
 
     return pickle.dumps(
